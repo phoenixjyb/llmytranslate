@@ -33,37 +33,50 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
 
 2. **Set up the environment**:
    ```bash
-   # Make setup script executable
-   chmod +x setup.sh
+   # Create and activate virtual environment
+   python3 -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    
-   # Run automated setup
-   ./setup.sh
-   
-   # Or manual setup:
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   # Install dependencies
    pip install -r requirements.txt
    ```
 
 3. **Install and configure Ollama** (if not already installed):
    ```bash
-   # Install Ollama
+   # Install Ollama (macOS/Linux)
    curl -fsSL https://ollama.ai/install.sh | sh
    
-   # Pull a recommended model
-   ollama pull llama3.1:8b
+   # Pull a recommended model for translation
+   ollama pull llava:latest
+   # Alternative models: gemma3:latest, qwen2.5vl:7b
    ```
 
-4. **Start the service**:
+4. **Configure environment variables**:
    ```bash
-   source venv/bin/activate
+   # Copy example environment file
+   cp .env.example .env
+   
+   # Edit .env file to set:
+   # AUTH__DISABLE_SIGNATURE_VALIDATION=true  # For development
+   # OLLAMA__MODEL_NAME=llava:latest          # Your preferred model
+   ```
+
+5. **Start the service**:
+   ```bash
+   source .venv/bin/activate
    python run.py
    ```
 
-5. **Access the service**:
-   - API: http://localhost:8888
-   - Interactive Documentation: http://localhost:8888/docs
-   - Health Check: http://localhost:8888/health
+6. **Verify installation**:
+   ```bash
+   # Test health endpoint
+   curl --noproxy "*" "http://127.0.0.1:8888/api/health"
+   
+   # Test translation (using demo credentials)
+   curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "q=Hello world&from=en&to=zh&appid=demo_app_id&salt=1234567890&sign=dummy"
+   ```
 
 ## 🐳 Docker Deployment
 
@@ -94,11 +107,30 @@ curl -X POST "http://localhost:8888/api/demo/translate" \
 
 ### Production API (Baidu Compatible)
 
-The service provides full compatibility with Baidu Translate API, including signature validation:
+The service provides full compatibility with Baidu Translate API. For development, signature validation can be disabled.
+
+#### Development Mode (Recommended for Testing)
 
 ```bash
-# Example translation request
-curl -X POST "http://localhost:8888/api/trans/vip/translate" \
+# Set environment variable to disable signature validation
+echo "AUTH__DISABLE_SIGNATURE_VALIDATION=true" >> .env
+
+# Example translation request (no valid signature required)
+curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "q=Hello world" \
+     -d "from=en" \
+     -d "to=zh" \
+     -d "appid=demo_app_id" \
+     -d "salt=1234567890" \
+     -d "sign=dummy"
+```
+
+#### Production Mode (Full Baidu Compatibility)
+
+```bash
+# Example with proper signature calculation
+curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world" \
      -d "from=en" \
@@ -107,6 +139,11 @@ curl -X POST "http://localhost:8888/api/trans/vip/translate" \
      -d "salt=1753229911982" \
      -d "sign=99994eb8fa5928a101e94810cf570ec1"
 ```
+
+**Important Notes:**
+- Use `--noproxy "*"` flag to bypass proxy settings for localhost
+- The service expects form-encoded data, not JSON
+- For development, use `appid=demo_app_id` with signature validation disabled
 
 Response:
 ```json
@@ -168,6 +205,80 @@ print(f"Translation: {result}")
 #   ]
 # }
 ```
+
+## 🔧 Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. 502 Bad Gateway Error
+**Problem**: Getting 502 errors when testing API endpoints
+**Solution**: This is usually caused by proxy settings interfering with localhost connections
+```bash
+# Use --noproxy flag to bypass proxy
+curl --noproxy "*" "http://127.0.0.1:8888/api/health"
+```
+
+#### 2. "Field required" Validation Errors
+**Problem**: Getting validation errors about missing fields
+**Solution**: Ensure you're using form-encoded data, not JSON
+```bash
+# ❌ Wrong - JSON format
+curl -H "Content-Type: application/json" -d '{"q":"test"}'
+
+# ✅ Correct - Form-encoded format
+curl -H "Content-Type: application/x-www-form-urlencoded" -d "q=test&from=en&to=zh&appid=demo_app_id&salt=123&sign=dummy"
+```
+
+#### 3. "Invalid application ID" Error
+**Problem**: Authentication fails with INVALID_APP_ID
+**Solution**: Use the correct demo credentials and ensure signature validation is disabled for development
+```bash
+# Add to .env file
+echo "AUTH__DISABLE_SIGNATURE_VALIDATION=true" >> .env
+
+# Use demo_app_id (not "test" or other values)
+curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "q=Hello&from=en&to=zh&appid=demo_app_id&salt=123&sign=dummy"
+```
+
+#### 4. Service Not Starting
+**Problem**: Service fails to start
+**Solution**: Check these common issues:
+```bash
+# 1. Verify Ollama is running
+ollama list
+
+# 2. Check if port 8888 is available
+lsof -i :8888
+
+# 3. Verify virtual environment is activated
+which python  # Should point to .venv/bin/python
+
+# 4. Check dependencies are installed
+pip list | grep fastapi
+```
+
+#### 5. Translation Quality Issues
+**Problem**: Poor translation results
+**Solution**: Try different models:
+```bash
+# Pull alternative models
+ollama pull gemma3:latest       # Good for general translation
+ollama pull qwen2.5vl:7b       # Good for Chinese-English
+ollama pull llava:latest       # Good for context understanding
+
+# Update model in .env
+echo "OLLAMA__MODEL_NAME=gemma3:latest" >> .env
+```
+
+### Integration Testing
+Use the provided test script to verify everything is working:
+```bash
+# From systemDesign project
+./test_translation_integration.sh
+```
+
 ## ⚙️ Configuration
 
 ### Environment Variables

@@ -137,8 +137,7 @@ async def translate_text(
             )
             
             return TranslationResponse(
-                from_lang=from_lang,
-                to_lang=to_lang,
+                **{"from": from_lang, "to": to_lang},  # Use aliases
                 trans_result=[],
                 error_code=auth_result["error_code"],
                 error_msg=auth_result["error_msg"]
@@ -147,11 +146,10 @@ async def translate_text(
         # Check rate limits
         await validate_rate_limit(appid)
         
-        # Create translation request
+        # Create translation request (use alias names for Pydantic)
         translation_request = TranslationRequest(
             q=q,
-            from_lang=from_lang,
-            to_lang=to_lang,
+            **{"from": from_lang, "to": to_lang},  # Use aliases
             appid=appid,
             salt=salt,
             sign=sign
@@ -182,8 +180,7 @@ async def translate_text(
         )
         
         return TranslationResponse(
-            from_lang=from_lang,
-            to_lang=to_lang,
+            **{"from": from_lang, "to": to_lang},  # Use aliases
             trans_result=[],
             error_code="INTERNAL_ERROR",
             error_msg="Internal server error"
@@ -215,8 +212,7 @@ async def demo_translate(
         # Create translation request
         translation_request = TranslationRequest(
             q=demo_request["q"],
-            from_lang=demo_request["from"],
-            to_lang=demo_request["to"],
+            **{"from": demo_request["from"], "to": demo_request["to"]},  # Use aliases
             appid=demo_request["appid"],
             salt=demo_request["salt"],
             sign=demo_request["sign"]
