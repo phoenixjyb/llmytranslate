@@ -13,7 +13,7 @@ aiohttp==3.9.1
 # Database
 sqlalchemy==2.0.23
 alembic==1.13.1
-sqlite3  # Built-in Python module
+# sqlite3 - Built-in Python module, no installation needed
 
 # Cache and Session Management
 redis==5.0.1

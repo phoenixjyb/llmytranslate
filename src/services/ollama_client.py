@@ -28,10 +28,23 @@ class OllamaClient:
     
     async def __aenter__(self):
         """Async context manager entry."""
+        import os
+        # Temporarily disable proxy for localhost connections
+        old_proxy = os.environ.get('http_proxy')
+        if old_proxy:
+            os.environ.pop('http_proxy', None)
+            os.environ.pop('https_proxy', None)
+            
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(self.timeout),
         )
+        
+        # Restore proxy if it was set
+        if old_proxy:
+            os.environ['http_proxy'] = old_proxy
+            os.environ['https_proxy'] = old_proxy
+            
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -42,8 +55,24 @@ class OllamaClient:
     async def health_check(self) -> Dict[str, Any]:
         """Check Ollama service health."""
         try:
+            # Initialize client if not already done
             if not self.client:
-                raise RuntimeError("Client not initialized")
+                import os
+                # Temporarily disable proxy for localhost connections
+                old_proxy = os.environ.get('http_proxy')
+                if old_proxy:
+                    os.environ.pop('http_proxy', None)
+                    os.environ.pop('https_proxy', None)
+                    
+                self.client = httpx.AsyncClient(
+                    base_url=self.base_url,
+                    timeout=httpx.Timeout(self.timeout),
+                )
+                
+                # Restore proxy if it was set
+                if old_proxy:
+                    os.environ['http_proxy'] = old_proxy
+                    os.environ['https_proxy'] = old_proxy
             
             response = await self.client.get("/api/tags")
             if response.status_code == 200:
@@ -73,8 +102,24 @@ class OllamaClient:
         model_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """Generate translation using Ollama."""
+        # Initialize client if not already done
         if not self.client:
-            raise RuntimeError("Client not initialized")
+            import os
+            # Temporarily disable proxy for localhost connections
+            old_proxy = os.environ.get('http_proxy')
+            if old_proxy:
+                os.environ.pop('http_proxy', None)
+                os.environ.pop('https_proxy', None)
+                
+            self.client = httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=httpx.Timeout(self.timeout),
+            )
+            
+            # Restore proxy if it was set
+            if old_proxy:
+                os.environ['http_proxy'] = old_proxy
+                os.environ['https_proxy'] = old_proxy
         
         model = model_name or self.model_name
         prompt = self._create_translation_prompt(text, source_lang, target_lang)

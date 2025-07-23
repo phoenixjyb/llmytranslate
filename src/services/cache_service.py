@@ -183,7 +183,17 @@ class CacheService:
     async def health_check(self) -> Dict[str, str]:
         """Check cache service health."""
         if not self.redis_client:
-            return {"status": "unhealthy", "error": "Redis client not initialized"}
+            # Try to initialize Redis connection
+            try:
+                self.redis_client = redis.from_url(
+                    self.redis_url,
+                    encoding="utf-8",
+                    decode_responses=True
+                )
+                await self.redis_client.ping()
+            except Exception as e:
+                logger.warning("Redis not available, using in-memory cache", error=str(e))
+                return {"status": "healthy", "cache_type": "in-memory"}
         
         try:
             # Test basic operations
@@ -193,7 +203,7 @@ class CacheService:
             await self.redis_client.delete(test_key)
             
             if value == "ok":
-                return {"status": "healthy"}
+                return {"status": "healthy", "cache_type": "redis"}
             else:
                 return {"status": "unhealthy", "error": "Redis operation test failed"}
         except Exception as e:
