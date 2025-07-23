@@ -41,7 +41,9 @@ class AuthService:
             is_active=True,
             rate_limit_per_minute=60,
             rate_limit_per_hour=1000,
-            rate_limit_per_day=10000
+            rate_limit_per_day=10000,
+            created_at=datetime.utcnow(),
+            last_used_at=None
         )
         self.api_keys[demo_key.app_id] = demo_key
         logger.info("Added demo API key", app_id=demo_key.app_id)
@@ -78,19 +80,22 @@ class AuthService:
                     "error_msg": "Application ID is inactive"
                 }
             
-            # Verify signature
-            if not self._verify_signature(
-                app_id=app_id,
-                query=query_text,
-                salt=salt,
-                secret=api_key_info.app_secret,
-                provided_sign=sign
-            ):
-                return {
-                    "valid": False,
-                    "error_code": "INVALID_SIGNATURE",
-                    "error_msg": "Invalid signature"
-                }
+            # Verify signature (skip if disabled in development)
+            if not self.settings.auth.disable_signature_validation:
+                if not self._verify_signature(
+                    app_id=app_id,
+                    query=query_text,
+                    salt=salt,
+                    secret=api_key_info.app_secret,
+                    provided_sign=sign
+                ):
+                    return {
+                        "valid": False,
+                        "error_code": "INVALID_SIGNATURE",
+                        "error_msg": "Invalid signature"
+                    }
+            else:
+                logger.info("Signature validation disabled for development")
             
             # Update last used timestamp
             api_key_info.last_used_at = datetime.utcnow()

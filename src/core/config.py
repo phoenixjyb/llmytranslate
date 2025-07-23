@@ -70,6 +70,10 @@ class AuthSettings(BaseSettings):
         default=30,
         description="Access token expiration time in minutes"
     )
+    disable_signature_validation: bool = Field(
+        default=False,
+        description="Disable Baidu-compatible signature validation for development"
+    )
 
 
 class APISettings(BaseSettings):

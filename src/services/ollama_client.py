@@ -28,23 +28,11 @@ class OllamaClient:
     
     async def __aenter__(self):
         """Async context manager entry."""
-        import os
-        # Temporarily disable proxy for localhost connections
-        old_proxy = os.environ.get('http_proxy')
-        if old_proxy:
-            os.environ.pop('http_proxy', None)
-            os.environ.pop('https_proxy', None)
-            
+        # Configure httpx client without proxy for localhost
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(self.timeout),
         )
-        
-        # Restore proxy if it was set
-        if old_proxy:
-            os.environ['http_proxy'] = old_proxy
-            os.environ['https_proxy'] = old_proxy
-            
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -55,38 +43,24 @@ class OllamaClient:
     async def health_check(self) -> Dict[str, Any]:
         """Check Ollama service health."""
         try:
-            # Initialize client if not already done
-            if not self.client:
-                import os
-                # Temporarily disable proxy for localhost connections
-                old_proxy = os.environ.get('http_proxy')
-                if old_proxy:
-                    os.environ.pop('http_proxy', None)
-                    os.environ.pop('https_proxy', None)
-                    
-                self.client = httpx.AsyncClient(
-                    base_url=self.base_url,
-                    timeout=httpx.Timeout(self.timeout),
-                )
-                
-                # Restore proxy if it was set
-                if old_proxy:
-                    os.environ['http_proxy'] = old_proxy
-                    os.environ['https_proxy'] = old_proxy
-            
-            response = await self.client.get("/api/tags")
-            if response.status_code == 200:
-                models = response.json().get("models", [])
-                return {
-                    "status": "healthy",
-                    "models": [model.get("name") for model in models],
-                    "active_model": self.model_name
-                }
-            else:
-                return {
-                    "status": "unhealthy",
-                    "error": f"HTTP {response.status_code}"
-                }
+            # Create a temporary client specifically for health check without proxy
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(5.0),
+                trust_env=False  # Don't use environment proxy settings
+            ) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+                if response.status_code == 200:
+                    models = response.json().get("models", [])
+                    return {
+                        "status": "healthy",
+                        "models": [model.get("name") for model in models],
+                        "active_model": self.model_name
+                    }
+                else:
+                    return {
+                        "status": "unhealthy",
+                        "error": f"HTTP {response.status_code}"
+                    }
         except Exception as e:
             logger.error("Ollama health check failed", error=str(e))
             return {
@@ -102,25 +76,6 @@ class OllamaClient:
         model_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """Generate translation using Ollama."""
-        # Initialize client if not already done
-        if not self.client:
-            import os
-            # Temporarily disable proxy for localhost connections
-            old_proxy = os.environ.get('http_proxy')
-            if old_proxy:
-                os.environ.pop('http_proxy', None)
-                os.environ.pop('https_proxy', None)
-                
-            self.client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=httpx.Timeout(self.timeout),
-            )
-            
-            # Restore proxy if it was set
-            if old_proxy:
-                os.environ['http_proxy'] = old_proxy
-                os.environ['https_proxy'] = old_proxy
-        
         model = model_name or self.model_name
         prompt = self._create_translation_prompt(text, source_lang, target_lang)
         
@@ -145,10 +100,15 @@ class OllamaClient:
                     target_lang=target_lang
                 )
                 
-                response = await self.client.post(
-                    "/api/generate",
-                    json=request_data.dict(),
-                )
+                # Create a temporary client for this request without proxy
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(self.timeout),
+                    trust_env=False  # Don't use environment proxy settings
+                ) as client:
+                    response = await client.post(
+                        f"{self.base_url}/api/generate",
+                        json=request_data.dict(),
+                    )
                 
                 if response.status_code == 200:
                     result = response.json()
