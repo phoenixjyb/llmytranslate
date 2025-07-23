@@ -1,0 +1,13 @@
+this project is about create a PC based tranlation service with local llm.
+below are requirements for the software:
+    1, llm is locally deployed, considering compute capability of mac m2 chip and nvidia gpu such as quadro p2000 or above
+    2, llm can be called via ollama 
+    3, the translation service mainly supports Chinese to English and English to Chinese translation
+    4, the tranlation service is mainly called via API, can be integrated into other applications
+    5, the translation service can mimic how baidu tranlate api is used
+    6, the translation service should handle concurrent requests efficiently
+    7, any applications that calls this translation service will feed into contents for translation via API and, the translation service itself will not maintain contents
+    8, statistics shall be supported, such as how many requests were made, how many were successful, and how many failed, each translation costs how many input tokens, and output tokens
+    9, the translation service can either be called locally or called remotely via web service 
+
+can you have a go in putting the above into a professional software design doc and flow chart, and help construct the software architecture for this translation service?
