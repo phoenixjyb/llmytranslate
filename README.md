@@ -28,10 +28,16 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/phoenixjyb/llmytranslate.git
-   cd llmYTranslate
+   cd llmytranslate
    ```
 
-2. **Set up the environment**:
+2. **Windows Setup (Recommended)**:
+   ```powershell
+   # Run setup script as Administrator
+   .\scripts\setup.ps1
+   ```
+
+3. **Manual Setup** (All Platforms):
    ```bash
    # Create and activate virtual environment
    python3 -m venv .venv
@@ -39,15 +45,19 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
    
    # Install dependencies
    pip install -r requirements.txt
+   
+   # Copy environment configuration
+   cp config/.env.example .env
    ```
 
-3. **Install and configure Ollama** (if not already installed):
+4. **Install and configure Ollama** (if not already installed):
    ```bash
    # Install Ollama (macOS/Linux)
    curl -fsSL https://ollama.ai/install.sh | sh
    
-   # Pull a recommended model for translation
-   ollama pull llava:latest
+   # Windows: Download from https://ollama.ai/
+   # Then pull a model for translation
+   ollama pull llama3.1:8b
    # Alternative models: gemma3:latest, qwen2.5vl:7b
    ```
 
@@ -77,6 +87,23 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world&from=en&to=zh&appid=demo_app_id&salt=1234567890&sign=dummy"
    ```
+
+### 🌐 Internet-Accessible Server Setup
+
+Want to make your Windows PC serve as a translation server accessible from anywhere? 
+
+```powershell
+# Run production setup (as Administrator)
+.\scripts\production-setup.ps1 -EnableHTTPS -InstallNginx
+```
+
+This sets up:
+- ✅ **Security**: Rate limiting, firewalls, monitoring
+- ✅ **Performance**: Nginx reverse proxy, caching
+- ✅ **Accessibility**: Router configuration guides
+- ✅ **Monitoring**: Health checks and logging
+
+📖 **Full Guide**: See `docs/PRODUCTION_SETUP_GUIDE.md` for complete instructions
 
 ## 🐳 Docker Deployment
 
@@ -333,7 +360,51 @@ export MODEL_NAME=qwen2.5:7b
 python run.py
 ```
 
-## 📖 API Reference
+## � Project Structure
+
+The project is organized for maintainability and ease of navigation:
+
+```
+llmytranslate/
+├── 📄 README.md                    # This file
+├── 📄 requirements.txt             # Python dependencies  
+├── 📄 run.py                       # Application entry point
+├── 📄 .env                         # Environment variables
+│
+├── 📂 src/                         # Source code
+│   ├── 📄 main.py                  # FastAPI application
+│   ├── 📂 api/routes/              # API endpoints
+│   ├── 📂 core/                    # Configuration & settings
+│   ├── 📂 models/                  # Data models
+│   └── 📂 services/                # Business logic
+│
+├── 📂 scripts/                     # Setup & utility scripts
+│   ├── 📄 setup.ps1               # Windows setup
+│   ├── 📄 production-setup.ps1    # Production deployment
+│   └── 📄 monitor-health.ps1      # Health monitoring
+│
+├── 📂 config/                      # Configuration files
+│   ├── 📄 .env.example            # Environment template
+│   └── 📄 nginx.conf              # Reverse proxy config
+│
+├── 📂 docs/                        # Documentation
+│   ├── 📄 PRODUCTION_SETUP_GUIDE.md
+│   ├── 📄 CLIENT_EXAMPLES.md
+│   ├── 📄 ROUTER_SETUP_GUIDE.md
+│   └── 📄 ...
+│
+├── 📂 tests/                       # Test suite
+└── 📂 logs/                        # Runtime logs
+```
+
+### Quick Navigation:
+- **🚀 Getting Started**: Use `scripts/setup.ps1` (Windows) or follow manual installation above
+- **🌐 Production Server**: See `docs/PRODUCTION_SETUP_GUIDE.md`
+- **📱 Client Examples**: Check `docs/CLIENT_EXAMPLES.md`
+- **🔧 Configuration**: Templates in `config/` directory
+- **📊 Monitoring**: Health scripts in `scripts/` directory
+
+## �📖 API Reference
 
 ### Core Endpoints
 
