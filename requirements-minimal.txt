@@ -1,0 +1,12 @@
+# Minimal requirements for basic functionality testing
+# Core framework (newer versions with pre-compiled wheels)
+fastapi>=0.104
+uvicorn[standard]>=0.24
+pydantic>=2.5
+pydantic-settings>=2.1
+
+# HTTP client
+httpx>=0.25
+
+# Basic functionality
+python-dotenv>=1.0
