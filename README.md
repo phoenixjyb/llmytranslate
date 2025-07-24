@@ -1,6 +1,8 @@
 # LLM Translation Service
 
-A high-performance, locally-hosted translation service that leverages Ollama-managed Large Language Models for Chinese-English bidirectional translation with Baidu Translate API compatibility.
+A high-performance, locally-hosted translation service that leverages Ollama-managed Large Language Models for Chinese-English bidirectional translation with Baidu Translate API compatibility. 
+
+**🆕 Supports both local and remote deployment modes for flexible integration!**
 
 ## 🚀 Features
 
@@ -14,30 +16,61 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
 - 🐳 **Docker Ready**: Complete containerization support with docker-compose
 - 🛡️ **Robust Error Handling**: Graceful fallbacks and comprehensive error responses
 - 📝 **Auto Documentation**: Interactive API documentation with FastAPI/OpenAPI
+- 🌐 **Deployment Modes**: Local and remote deployment with service discovery
+- 🔍 **Service Discovery**: Automatic detection and connection of translation services
+
+## 📋 Deployment Modes
+
+### 🏠 Local Mode
+Use when both systemDesign and llmYTranslate are on the same computer:
+- Optimized for single-machine development
+- Minimal network configuration
+- Direct localhost communication
+- Simplified authentication (optional)
+
+### 🌐 Remote Mode  
+Use when llmYTranslate is on a different machine/network:
+- Network service discovery
+- External host configuration
+- Enhanced security and rate limiting
+- CORS support for cross-origin requests
+- Nginx reverse proxy support
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Automated Deployment (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/phoenixjyb/llmytranslate.git
+cd llmYTranslate
+
+# Local deployment (same machine as systemDesign)
+./deploy.sh --mode local --auto-install
+
+# Remote deployment (different machine/network)
+./deploy.sh --mode remote --auto-install
+```
+
+### Option 2: Manual Setup
+
+### Option 2: Manual Setup
+
+#### Prerequisites
 
 - Python 3.11+ (recommended: Python 3.13)
 - [Ollama](https://ollama.ai/) installed and running
 - Redis server (optional, for caching - graceful fallback available)
 
-### Installation
+#### Installation
 
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/phoenixjyb/llmytranslate.git
-   cd llmytranslate
+   cd llmYTranslate
    ```
 
-2. **Windows Setup (Recommended)**:
-   ```powershell
-   # Run setup script as Administrator
-   .\scripts\setup.ps1
-   ```
-
-3. **Manual Setup** (All Platforms):
+2. **Set up the environment**:
    ```bash
    # Create and activate virtual environment
    python3 -m venv .venv
@@ -45,132 +78,121 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
    
    # Install dependencies
    pip install -r requirements.txt
-   
-   # Copy environment configuration
-   cp config/.env.example .env
    ```
 
-4. **Install and configure Ollama** (if not already installed):
+3. **Install and configure Ollama** (if not already installed):
    ```bash
    # Install Ollama (macOS/Linux)
    curl -fsSL https://ollama.ai/install.sh | sh
    
-   # Windows: Download from https://ollama.ai/
-   # Then pull a model for translation
-   ollama serve  # Start Ollama service
-   ollama pull llama3.1:8b
+   # Pull a recommended model for translation
+   ollama pull llava:latest
    # Alternative models: gemma3:latest, qwen2.5vl:7b
    ```
 
-5. **Configure environment variables**:
+4. **Configure deployment mode**:
    ```bash
-   # Copy example environment file
-   cp config/.env.example .env
+   # For local deployment (same machine)
+   cp .env.local .env
    
-   # Edit .env file to set:
-   ENVIRONMENT=development
-   DEBUG=true
-   API__HOST=0.0.0.0
-   API__PORT=8000
+   # For remote deployment (different machine/network)
+   cp .env.remote .env
+   # Edit .env to set your external IP/domain
    ```
 
-   **⚠️ Important Note**: If you have Ollama installed via installer, you may have a system environment variable `ollama` that conflicts with the service configuration. Clear it before starting:
-   ```powershell
-   # Windows PowerShell
-   Remove-Item Env:\ollama -ErrorAction SilentlyContinue
-   ```
-
-6. **Start the service**:
-   
-   **🚀 Easy Startup (Recommended)**:
-   ```powershell
-   # Windows PowerShell - Start service with virtual environment
-   Remove-Item Env:\ollama -ErrorAction SilentlyContinue  # Clear conflicting env var
-   .\.venv\Scripts\python.exe run.py
-7. **Access the service**:
-   
-   Once started, the service will be available at:
-   - **Local access**: `http://localhost:8000`
-   - **Local network access**: `http://[YOUR_LOCAL_IP]:8000` (e.g., `http://192.168.0.108:8000`)
-   - **API Documentation**: `http://localhost:8000/docs`
-   - **Health Check**: `http://localhost:8000/api/health`
-   
-   **🌐 Network Access Verified**: The service is configured to accept connections from all network interfaces (`0.0.0.0:8000`), making it accessible from other devices on your local network.
-
-8. **Verify installation**:
+5. **Start the service**:
    ```bash
-   # Test health endpoint
-   curl http://localhost:8000/api/health
-   
-   # Test from local network (replace with your IP)
-   curl http://192.168.0.108:8000/api/health
+   source .venv/bin/activate
+   python run.py
    ```
-
-### 🌐 Internet-Accessible Server Setup
-
-✅ **Local Network Access Achieved**: Your service is now accessible from devices on your local network!
-
-For **internet access**, follow these steps:
-
-1. **Automated Setup** (Recommended):
-   ```powershell
-   # Configure firewall and network settings
-   .\deploy-online.ps1
-   ```
-
-2. **Router Configuration**:
-   - Access your router admin panel (usually `http://192.168.0.1` or `http://192.168.1.1`)
-   - Set up **Port Forwarding**:
-     - External Port: `8080` (your choice)
-     - Internal IP: `[YOUR_LOCAL_IP]` (e.g., `192.168.0.108`)
-     - Internal Port: `8000`
-     - Protocol: `TCP`
-
-3. **Internet Access URLs** (after router setup):
-   - Main service: `http://[YOUR_PUBLIC_IP]:8080`
-   - API docs: `http://[YOUR_PUBLIC_IP]:8080/docs`
-
-📖 **Detailed Guides**: 
-- `docs/PRODUCTION_SETUP_GUIDE.md` - Complete production setup
-- `docs/ROUTER_SETUP_GUIDE.md` - Router configuration
-- `REMOTE_ACCESS_GUIDE.md` - Internet access setup
 
 ## 🐳 Docker Deployment
 
+### Local Docker Deployment
 ```bash
-# Start all services (API, Ollama, Redis)
-docker-compose up -d
-
-# Check service status
-docker-compose ps
+# Start services for local development
+docker-compose -f docker-compose.local.yml up -d
 
 # Pull the required LLM model
-docker exec llm-ollama ollama pull llama3.1:8b
-
-# View logs
-docker-compose logs -f
+docker exec llm-ollama-local ollama pull llava:latest
 ```
 
-## � Documentation
+### Remote Docker Deployment
+```bash
+# Set environment variables
+export EXTERNAL_HOST=your-external-ip-or-domain
+export SECRET_KEY=your-production-secret-key
+export DISABLE_AUTH=false
 
-### Quick References
-- **🚀 [Quick Network Access Guide](QUICK_NETWORK_ACCESS.md)** - ✅ Local & Internet Access Setup (NEW!)
-- **📋 [Quick Start Production](QUICK_START_PRODUCTION.md)** - Fast production deployment
-- **🛠️ [Startup Scripts Guide](STARTUP_SCRIPTS.md)** - Service management commands
+# Start services for remote access
+docker-compose -f docker-compose.remote.yml up -d
 
-### Detailed Guides
-- **🔧 [Production Setup Guide](docs/PRODUCTION_SETUP_GUIDE.md)** - Comprehensive production setup
-- **🌐 [Router Setup Guide](docs/ROUTER_SETUP_GUIDE.md)** - Router configuration for internet access
-- **🧪 [Testing Procedures](TESTING_PROCEDURE.md)** - Testing and validation procedures
-- **📊 [Client Examples](CLIENT_EXAMPLES.md)** - API usage examples and integration guides
-- **🏗️ [System Architecture](docs/SYSTEM_ARCHITECTURE.md)** - Technical architecture overview
+# Pull the required LLM model
+docker exec llm-ollama-remote ollama pull llava:latest
+```
 
-## �🔧 API Usage
+## � Service Discovery
+
+### Discover Available Services
+```bash
+# Find all available translation services
+python discover_service.py --discover
+
+# Find the best available service
+python discover_service.py --best
+
+# Test a specific service
+python discover_service.py --test http://192.168.1.100:9000
+```
+
+### Integration with systemDesign
+The service provides automatic discovery endpoints that systemDesign can use:
+
+```bash
+# Get service information
+curl --noproxy "*" http://your-service:9000/api/discovery/info
+
+# Test connectivity
+curl --noproxy "*" http://your-service:9000/api/discovery/network
+
+# Discover other services on network
+curl --noproxy "*" http://your-service:9000/api/discovery/discover
+```
+
+## ⚙️ Configuration
+
+### Local Mode Configuration (.env.local)
+```bash
+DEPLOYMENT__MODE=local
+DEPLOYMENT__SERVICE_NAME=llm-translation-local
+API__HOST=127.0.0.1
+API__PORT=8888
+AUTH__DISABLE_SIGNATURE_VALIDATION=true
+ENVIRONMENT=development
+DEBUG=true
+```
+
+### Remote Mode Configuration (.env.remote)  
+```bash
+DEPLOYMENT__MODE=remote
+DEPLOYMENT__SERVICE_NAME=llm-translation-remote
+DEPLOYMENT__EXTERNAL_HOST=your-external-ip-or-domain
+DEPLOYMENT__EXTERNAL_PORT=8888
+DEPLOYMENT__ENABLE_DISCOVERY=true
+API__HOST=0.0.0.0
+API__PORT=8888
+AUTH__DISABLE_SIGNATURE_VALIDATION=false
+ENVIRONMENT=production
+DEBUG=false
+```
+
+## 🔧 API Usage
 
 ### Demo Translation (No Authentication Required)
 
 ```bash
-curl -X POST "http://localhost:8888/api/demo/translate" \
+curl -X POST "http://localhost:9000/api/demo/translate" \
+     --noproxy "*" \
      -F "q=hello world" \
      -F "from=en" \
      -F "to=zh"
@@ -187,7 +209,8 @@ The service provides full compatibility with Baidu Translate API. For developmen
 echo "AUTH__DISABLE_SIGNATURE_VALIDATION=true" >> .env
 
 # Example translation request (no valid signature required)
-curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:9000/api/trans/vip/translate" \
+     --noproxy "*" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world" \
      -d "from=en" \
@@ -201,7 +224,8 @@ curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
 
 ```bash
 # Example with proper signature calculation
-curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:9000/api/trans/vip/translate" \
+     --noproxy "*" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world" \
      -d "from=en" \
@@ -212,7 +236,6 @@ curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
 ```
 
 **Important Notes:**
-- Use `--noproxy "*"` flag to bypass proxy settings for localhost
 - The service expects form-encoded data, not JSON
 - For development, use `appid=demo_app_id` with signature validation disabled
 
@@ -245,7 +268,7 @@ def create_signature(app_id, query, salt, secret):
 # Configuration
 APP_ID = "demo_app_id"
 APP_SECRET = "demo_app_secret"
-API_URL = "http://localhost:8888/api/trans/vip/translate"
+API_URL = "http://localhost:9000/api/trans/vip/translate"
 
 # Translation request
 query = "Hello, how are you today?"
@@ -281,12 +304,15 @@ print(f"Translation: {result}")
 
 ### Common Issues and Solutions
 
-#### 1. 502 Bad Gateway Error
-**Problem**: Getting 502 errors when testing API endpoints
-**Solution**: This is usually caused by proxy settings interfering with localhost connections
+#### 1. Connection Refused or Timeout Errors
+**Problem**: Cannot connect to the service or getting timeout errors
+**Solution**: Check that the service is running and the port is correct
 ```bash
-# Use --noproxy flag to bypass proxy
-curl --noproxy "*" "http://127.0.0.1:8888/api/health"
+# Check if service is running
+curl --noproxy "*" "http://127.0.0.1:9000/api/health"
+
+# If using different port, check your .env file
+grep API__PORT .env
 ```
 
 #### 2. "Field required" Validation Errors
@@ -308,7 +334,8 @@ curl -H "Content-Type: application/x-www-form-urlencoded" -d "q=test&from=en&to=
 echo "AUTH__DISABLE_SIGNATURE_VALIDATION=true" >> .env
 
 # Use demo_app_id (not "test" or other values)
-curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:9000/api/trans/vip/translate" \
+  --noproxy "*" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "q=Hello&from=en&to=zh&appid=demo_app_id&salt=123&sign=dummy"
 ```
@@ -321,7 +348,7 @@ curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
 ollama list
 
 # 2. Check if port 8888 is available
-lsof -i :8888
+lsof -i :9000
 
 # 3. Verify virtual environment is activated
 which python  # Should point to .venv/bin/python
@@ -404,51 +431,7 @@ export MODEL_NAME=qwen2.5:7b
 python run.py
 ```
 
-## � Project Structure
-
-The project is organized for maintainability and ease of navigation:
-
-```
-llmytranslate/
-├── 📄 README.md                    # This file
-├── 📄 requirements.txt             # Python dependencies  
-├── 📄 run.py                       # Application entry point
-├── 📄 .env                         # Environment variables
-│
-├── 📂 src/                         # Source code
-│   ├── 📄 main.py                  # FastAPI application
-│   ├── 📂 api/routes/              # API endpoints
-│   ├── 📂 core/                    # Configuration & settings
-│   ├── 📂 models/                  # Data models
-│   └── 📂 services/                # Business logic
-│
-├── 📂 scripts/                     # Setup & utility scripts
-│   ├── 📄 setup.ps1               # Windows setup
-│   ├── 📄 production-setup.ps1    # Production deployment
-│   └── 📄 monitor-health.ps1      # Health monitoring
-│
-├── 📂 config/                      # Configuration files
-│   ├── 📄 .env.example            # Environment template
-│   └── 📄 nginx.conf              # Reverse proxy config
-│
-├── 📂 docs/                        # Documentation
-│   ├── 📄 PRODUCTION_SETUP_GUIDE.md
-│   ├── 📄 CLIENT_EXAMPLES.md
-│   ├── 📄 ROUTER_SETUP_GUIDE.md
-│   └── 📄 ...
-│
-├── 📂 tests/                       # Test suite
-└── 📂 logs/                        # Runtime logs
-```
-
-### Quick Navigation:
-- **🚀 Getting Started**: Use `scripts/setup.ps1` (Windows) or follow manual installation above
-- **🌐 Production Server**: See `docs/PRODUCTION_SETUP_GUIDE.md`
-- **📱 Client Examples**: Check `docs/CLIENT_EXAMPLES.md`
-- **🔧 Configuration**: Templates in `config/` directory
-- **📊 Monitoring**: Health scripts in `scripts/` directory
-
-## �📖 API Reference
+## 📖 API Reference
 
 ### Core Endpoints
 
@@ -672,7 +655,7 @@ The service includes comprehensive monitoring capabilities:
 **Metrics Collection**
 ```bash
 # View real-time metrics
-curl http://localhost:8888/api/metrics
+curl --noproxy "*" http://localhost:9000/api/metrics
 
 # Key metrics tracked:
 # - Request counts and success rates
@@ -708,7 +691,7 @@ curl http://localhost:8888/api/metrics
 scrape_configs:
   - job_name: 'llm-translation'
     static_configs:
-      - targets: ['localhost:8888']
+      - targets: ['localhost:9000']
     metrics_path: '/api/metrics'
 ```
 
@@ -986,9 +969,6 @@ ollama list
 
 # Test direct connection
 curl http://localhost:11434/api/version
-
-# Check proxy settings (may block localhost)
-unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
 ```
 
 **💾 Redis Connection Failed**
@@ -1053,7 +1033,8 @@ print(f'Signature: {sign}')
 "
 
 # Check API credentials
-curl -X POST "http://localhost:8888/api/trans/vip/translate" \
+curl -X POST "http://localhost:9000/api/trans/vip/translate" \
+     --noproxy "*" \
      -d "q=test&from=en&to=zh&appid=demo_app_id&salt=123&sign=<generated_sign>"
 ```
 
@@ -1062,10 +1043,10 @@ curl -X POST "http://localhost:8888/api/trans/vip/translate" \
 # Symptoms: "Address already in use" error
 
 # Find process using port 8888
-lsof -ti:8888
+lsof -ti:9000
 
 # Kill existing process
-kill -9 $(lsof -ti:8888)
+kill -9 $(lsof -ti:9000)
 
 # Use different port
 export API_PORT=8889
@@ -1101,13 +1082,13 @@ python run.py 2>&1 | jq .
 **Health Check Debug**
 ```bash
 # Detailed health information
-curl http://localhost:8888/health | jq .
+curl --noproxy "*" http://localhost:9000/health | jq .
 
 # Check individual services
-curl http://localhost:8888/health/detailed | jq .services
+curl --noproxy "*" http://localhost:9000/health/detailed | jq .services
 
 # Test Ollama connectivity directly
-curl http://localhost:11434/api/version
+curl --noproxy "*" http://localhost:11434/api/version
 ```
 
 ## 🤝 Contributing
@@ -1198,7 +1179,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Getting Help
 
-1. **Check Documentation**: Visit `http://localhost:8888/docs` for API documentation
+1. **Check Documentation**: Visit `http://localhost:9000/docs` for API documentation
 2. **Search Issues**: Look through [existing issues](https://github.com/phoenixjyb/llmytranslate/issues)
 3. **Create Issue**: Report bugs or request features
 4. **Community Discussion**: Ask questions in discussions
@@ -1221,4 +1202,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **⚠️ Important Note**: This service is designed for local deployment and development use. For production deployment, ensure proper security measures, monitoring, resource allocation, and compliance with your organization's policies.
 
-**🚀 Quick Start**: Want to try it immediately? Run `./setup.sh && python run.py` and visit `http://localhost:8888/docs`!
+**🚀 Quick Start**: Want to try it immediately? Run `./setup.sh && python run.py` and visit `http://localhost:9000/docs`!

@@ -254,7 +254,8 @@ async def generate_demo_signature(
             "method": "POST",
             "content_type": "application/x-www-form-urlencoded",
             "parameters": demo_request,
-            "curl_example": f"""curl -X POST "http://localhost:8000/api/trans/vip/translate" \\
+            "curl_example": f"""curl -X POST "http://localhost:8888/api/trans/vip/translate" \\
+     --noproxy "*" \\
      -H "Content-Type: application/x-www-form-urlencoded" \\
      -d "q={demo_request['q']}" \\
      -d "from={demo_request['from']}" \\

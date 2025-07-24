@@ -1,0 +1,95 @@
+version: '3.8'
+
+# Remote deployment docker-compose  
+# Use this when llmYTranslate is on a different machine/network
+
+services:
+  translation-api:
+    build: .
+    container_name: llm-translation-remote
+    ports:
+      - "8888:8888"  # Main API port
+      - "8889:8889"  # Discovery port
+      - "8001:8001"  # Metrics port
+    environment:
+      - DEPLOYMENT__MODE=remote
+      - DEPLOYMENT__SERVICE_NAME=llm-translation-remote
+      - DEPLOYMENT__ENABLE_DISCOVERY=true
+      - DEPLOYMENT__DISCOVERY_PORT=8889
+      - DEPLOYMENT__EXTERNAL_HOST=${EXTERNAL_HOST:-auto-detect}
+      - DEPLOYMENT__EXTERNAL_PORT=8888
+      - API__HOST=0.0.0.0
+      - API__PORT=8888
+      - API__CORS_ORIGINS=["*"]
+      - OLLAMA__OLLAMA_HOST=http://ollama:11434
+      - REDIS__REDIS_URL=redis://redis:6379/0
+      - AUTH__DISABLE_SIGNATURE_VALIDATION=${DISABLE_AUTH:-false}
+      - AUTH__SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - RATE_LIMIT__REQUESTS_PER_MINUTE=30
+      - RATE_LIMIT__REQUESTS_PER_HOUR=500
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - redis
+      - ollama
+    restart: unless-stopped
+    networks:
+      - translation-remote
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: llm-ollama-remote
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data_remote:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    networks:
+      - translation-remote
+    # Uncomment for GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  redis:
+    image: redis:7-alpine
+    container_name: llm-redis-remote
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_remote:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    restart: unless-stopped
+    networks:
+      - translation-remote
+
+  nginx:
+    image: nginx:alpine
+    container_name: llm-nginx-remote
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.remote.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - translation-api
+    restart: unless-stopped
+    networks:
+      - translation-remote
+
+volumes:
+  ollama_data_remote:
+  redis_data_remote:
+
+networks:
+  translation-remote:
+    driver: bridge

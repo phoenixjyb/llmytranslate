@@ -9,7 +9,8 @@ from fastapi.responses import JSONResponse
 import time
 
 from .core.config import get_settings
-from .api.routes import translation, health, admin
+from .core.network import NetworkManager
+from .api.routes import translation, health, admin, discovery
 
 # Mock logger
 class MockLogger:
@@ -24,6 +25,7 @@ def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
     
     settings = get_settings()
+    network_manager = NetworkManager(settings)
     
     # Create FastAPI app
     app = FastAPI(
@@ -44,11 +46,22 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Add trusted host middleware
+    # Add trusted host middleware (more permissive for remote deployment)
     if not settings.debug:
+        allowed_hosts = ["localhost", "127.0.0.1", settings.api.host]
+        
+        # Add additional trusted hosts for remote deployment
+        if settings.deployment.mode == "remote":
+            if settings.deployment.external_host:
+                allowed_hosts.append(settings.deployment.external_host)
+            # Add local network IP
+            local_ip = network_manager.get_local_ip(settings.deployment.network_interface)
+            if local_ip and local_ip not in allowed_hosts:
+                allowed_hosts.append(local_ip)
+        
         app.add_middleware(
             TrustedHostMiddleware,
-            allowed_hosts=["localhost", "127.0.0.1", settings.api.host]
+            allowed_hosts=allowed_hosts
         )
     
     # Add request timing middleware
@@ -82,15 +95,25 @@ def create_app() -> FastAPI:
     app.include_router(translation.router, prefix="/api")
     app.include_router(health.router, prefix="/api")
     app.include_router(admin.router, prefix="/api/admin")
+    app.include_router(discovery.router)  # Discovery routes already have /api/discovery prefix
     
     # Root endpoint
     @app.get("/")
     async def root():
+        service_info = network_manager.get_service_info()
         return {
             "name": settings.api.title,
             "version": settings.api.version,
             "description": settings.api.description,
-            "docs_url": "/docs" if settings.debug else None
+            "deployment_mode": settings.deployment.mode,
+            "connection_url": network_manager.get_connection_url(),
+            "docs_url": "/docs" if settings.debug else None,
+            "service_discovery": "/api/discovery/info",
+            "endpoints": {
+                "health": "/api/health",
+                "translate": "/api/trans/vip/translate",
+                "demo_translate": "/api/demo/translate"
+            }
         }
     
     return app

@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+#!/usr/bin/en# Configuration
+BASE_URL = "http://localhost:9000"python3
 """
 Validation script to test the LLM Translation Service.
 """
@@ -12,7 +13,7 @@ import aiohttp
 from typing import Dict, Any
 
 # Configuration
-BASE_URL = "http://localhost:8888"
+BASE_URL = "http://localhost:8000"
 DEMO_APP_ID = "demo_app_id"
 DEMO_APP_SECRET = "demo_app_secret"
 

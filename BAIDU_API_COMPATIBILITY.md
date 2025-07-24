@@ -168,7 +168,6 @@ echo -n "demo_app_idHello world1753229911982demo_app_secret" | md5sum
 
 # Test request
 curl -X POST "http://localhost:8888/api/trans/vip/translate" \
-     --noproxy "*" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world" \
      -d "from=en" \

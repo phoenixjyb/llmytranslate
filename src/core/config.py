@@ -76,6 +76,43 @@ class AuthSettings(BaseSettings):
     )
 
 
+class DeploymentSettings(BaseSettings):
+    """Deployment mode configuration."""
+    
+    mode: str = Field(
+        default="local",
+        description="Deployment mode: 'local' or 'remote'"
+    )
+    service_name: str = Field(
+        default="llm-translation",
+        description="Service name for identification"
+    )
+    external_host: Optional[str] = Field(
+        default=None,
+        description="External host address for remote mode"
+    )
+    external_port: Optional[int] = Field(
+        default=None,
+        description="External port for remote mode"
+    )
+    network_interface: str = Field(
+        default="auto",
+        description="Network interface to bind to ('auto', 'eth0', 'wlan0', etc.)"
+    )
+    enable_discovery: bool = Field(
+        default=False,
+        description="Enable service discovery for remote mode"
+    )
+    discovery_port: int = Field(
+        default=8889,
+        description="Port for service discovery endpoint"
+    )
+    trusted_networks: List[str] = Field(
+        default=["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+        description="Trusted network ranges for remote access"
+    )
+
+
 class APISettings(BaseSettings):
     """API configuration."""
     
@@ -191,6 +228,7 @@ class Settings(BaseSettings):
     )
     
     # Sub-configurations
+    deployment: DeploymentSettings = Field(default_factory=DeploymentSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)

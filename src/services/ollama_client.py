@@ -28,7 +28,7 @@ class OllamaClient:
     
     async def __aenter__(self):
         """Async context manager entry."""
-        # Configure httpx client without proxy for localhost
+        # Configure httpx client for direct connection
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(self.timeout),
@@ -43,10 +43,9 @@ class OllamaClient:
     async def health_check(self) -> Dict[str, Any]:
         """Check Ollama service health."""
         try:
-            # Create a temporary client specifically for health check without proxy
+            # Create a temporary client for health check
             async with httpx.AsyncClient(
-                timeout=httpx.Timeout(5.0),
-                trust_env=False  # Don't use environment proxy settings
+                timeout=httpx.Timeout(5.0)
             ) as client:
                 response = await client.get(f"{self.base_url}/api/tags")
                 if response.status_code == 200:
