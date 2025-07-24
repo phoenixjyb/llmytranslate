@@ -25,20 +25,28 @@ async def health_check() -> HealthCheckResponse:
     """
     Comprehensive health check for all services.
     """
+    from datetime import datetime
+    from ...core.config import get_settings
+    settings = get_settings()
+    
     try:
         # Get health status from translation service
         health_data = await translation_service.health_check()
         
         return HealthCheckResponse(
             status=health_data["status"],
-            services=health_data["services"],
-            model_info=health_data.get("model_info")
+            timestamp=datetime.utcnow().isoformat(),
+            version=settings.api.version,
+            services=health_data["services"]
         )
         
     except Exception as e:
         logger.error("Health check failed", error=str(e))
+        
         return HealthCheckResponse(
             status="unhealthy",
+            timestamp=datetime.utcnow().isoformat(),
+            version=settings.api.version,
             services={"error": str(e)}
         )
 

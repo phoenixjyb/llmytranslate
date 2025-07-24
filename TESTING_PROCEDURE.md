@@ -89,6 +89,21 @@ curl -X POST "http://localhost:8000/api/demo/translate" -d "q=你好世界&from=
 ### 3. API Documentation
 Visit: http://localhost:8000/docs (when DEBUG=true)
 
+### 4. Remote Access Testing
+For remote access from different networks, see: [`REMOTE_ACCESS_GUIDE.md`](./REMOTE_ACCESS_GUIDE.md)
+
+**Quick Remote Setup:**
+```powershell
+# 1. Enable external connections
+# Update .env: API__HOST=0.0.0.0
+
+# 2. Configure Windows Firewall
+New-NetFirewallRule -DisplayName "LLM Translation Service" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
+
+# 3. Test from remote PC
+curl http://YOUR_PUBLIC_IP:8000/api/health
+```
+
 ## 🔧 Configuration
 
 ### Minimal Working Configuration (.env)

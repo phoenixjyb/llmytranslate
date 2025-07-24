@@ -72,10 +72,26 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
    ```
 
 5. **Start the service**:
+   
+   **🚀 Easy Startup (Recommended)**:
+   ```powershell
+   # Windows PowerShell (validates everything and starts service)
+   .\start-service.ps1
+   
+   # Windows Batch (simple version)
+   start-service.bat
+   
+   # Linux/macOS
+   ./start-service.sh
+   ```
+   
+   **Manual Startup**:
    ```bash
    source .venv/bin/activate
    python run.py
    ```
+   
+   📖 **For detailed startup procedures**: See [`STARTUP_SCRIPTS.md`](./STARTUP_SCRIPTS.md) and [`TESTING_PROCEDURE.md`](./TESTING_PROCEDURE.md)
 
 6. **Verify installation**:
    ```bash
