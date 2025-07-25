@@ -87,8 +87,8 @@ class TranslationService:
                 
                 # Return error response
                 return TranslationResponse(
-                    from_lang=request.from_lang,
-                    to_lang=request.to_lang,
+                    **{"from": request.from_lang},
+                    to=request.to,
                     trans_result=[],
                     error_code="TRANSLATION_FAILED",
                     error_msg=translation_result.get("error", "Translation failed")
@@ -113,7 +113,7 @@ class TranslationService:
                 request_id=request_id,
                 app_id=request.appid,
                 source_lang=request.from_lang,
-                target_lang=request.to_lang,
+                target_lang=request.to,
                 response_time=time.time() - start_time
             )
             
@@ -139,7 +139,7 @@ class TranslationService:
             
             return TranslationResponse(
                 from_lang=getattr(request, 'from_lang', 'unknown'),
-                to_lang=getattr(request, 'to_lang', 'unknown'),
+                to_lang=getattr(request, 'to', 'unknown'),
                 trans_result=[],
                 error_code="INTERNAL_ERROR",
                 error_msg=str(e)
@@ -154,10 +154,10 @@ class TranslationService:
         if request.from_lang not in supported_langs:
             raise ValueError(f"Unsupported source language: {request.from_lang}")
         
-        if request.to_lang not in supported_langs:
-            raise ValueError(f"Unsupported target language: {request.to_lang}")
+        if request.to not in supported_langs:
+            raise ValueError(f"Unsupported target language: {request.to}")
         
-        if request.from_lang == request.to_lang and request.from_lang != "auto":
+        if request.from_lang == request.to and request.from_lang != "auto":
             raise ValueError("Source and target languages cannot be the same")
     
     async def _get_cached_translation(self, request: TranslationRequest) -> Optional[Dict[str, Any]]:
@@ -167,7 +167,7 @@ class TranslationService:
                 cache_key = ollama_client.create_cache_key(
                     request.q,
                     request.from_lang,
-                    request.to_lang
+                    request.to
                 )
                 return await cache_service.get_translation(cache_key)
         except Exception as e:
@@ -185,7 +185,7 @@ class TranslationService:
                 cache_key = ollama_client.create_cache_key(
                     request.q,
                     request.from_lang,
-                    request.to_lang
+                    request.to
                 )
                 await cache_service.set_translation(
                     cache_key,
@@ -207,7 +207,7 @@ class TranslationService:
                 return await ollama_client.generate_translation(
                     text=request.q,
                     source_lang=request.from_lang,
-                    target_lang=request.to_lang
+                    target_lang=request.to
                 )
         except Exception as e:
             logger.warning(f"Ollama translation failed: {e}, using mock response for demo")
@@ -228,8 +228,8 @@ class TranslationService:
                 }
             }
             
-            translation_map = mock_translations.get((request.from_lang, request.to_lang), {})
-            mock_translation = translation_map.get(request.q, f"[DEMO] Translated '{request.q}' from {request.from_lang} to {request.to_lang}")
+            translation_map = mock_translations.get((request.from_lang, request.to), {})
+            mock_translation = translation_map.get(request.q, f"[DEMO] Translated '{request.q}' from {request.from_lang} to {request.to}")
             
             return {
                 "success": True,
@@ -245,8 +245,8 @@ class TranslationService:
     ) -> TranslationResponse:
         """Format translation response in Baidu API format."""
         return TranslationResponse(
-            from_lang=request.from_lang,
-            to_lang=request.to_lang,
+            **{"from": request.from_lang},  # Use alias key
+            to=request.to,  # Correct field name
             trans_result=[
                 TranslationResult(
                     src=request.q,
@@ -270,7 +270,7 @@ class TranslationService:
                 request_id=request_id,
                 app_id=request.appid,
                 source_language=request.from_lang,
-                target_language=request.to_lang,
+                target_language=request.to,
                 input_text_length=len(request.q),
                 output_text_length=len(result.get("translation", "")),
                 input_tokens=result.get("input_tokens", 0),

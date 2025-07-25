@@ -142,7 +142,7 @@ python discover_service.py --discover
 python discover_service.py --best
 
 # Test a specific service
-python discover_service.py --test http://192.168.1.100:9002
+python discover_service.py --test http://192.168.1.100:8000
 ```
 
 ### Integration with systemDesign
@@ -150,13 +150,13 @@ The service provides automatic discovery endpoints that systemDesign can use:
 
 ```bash
 # Get service information
-curl --noproxy "*" http://your-service:9002/api/discovery/info
+curl --noproxy "*" http://your-service:8000/api/discovery/info
 
 # Test connectivity
-curl --noproxy "*" http://your-service:9002/api/discovery/network
+curl --noproxy "*" http://your-service:8000/api/discovery/network
 
 # Discover other services on network
-curl --noproxy "*" http://your-service:9002/api/discovery/discover
+curl --noproxy "*" http://your-service:8000/api/discovery/discover
 ```
 
 ## ⚙️ Configuration
@@ -166,7 +166,7 @@ curl --noproxy "*" http://your-service:9002/api/discovery/discover
 DEPLOYMENT__MODE=local
 DEPLOYMENT__SERVICE_NAME=llm-translation-local
 API__HOST=127.0.0.1
-API__PORT=8888
+API__PORT=8000
 AUTH__DISABLE_SIGNATURE_VALIDATION=true
 ENVIRONMENT=development
 DEBUG=true
@@ -177,10 +177,10 @@ DEBUG=true
 DEPLOYMENT__MODE=remote
 DEPLOYMENT__SERVICE_NAME=llm-translation-remote
 DEPLOYMENT__EXTERNAL_HOST=your-external-ip-or-domain
-DEPLOYMENT__EXTERNAL_PORT=8888
+DEPLOYMENT__EXTERNAL_PORT=8000
 DEPLOYMENT__ENABLE_DISCOVERY=true
 API__HOST=0.0.0.0
-API__PORT=8888
+API__PORT=8000
 AUTH__DISABLE_SIGNATURE_VALIDATION=false
 ENVIRONMENT=production
 DEBUG=false
@@ -191,7 +191,7 @@ DEBUG=false
 ### Demo Translation (No Authentication Required)
 
 ```bash
-curl -X POST "http://localhost:9002/api/demo/translate" \
+curl -X POST "http://localhost:8000/api/demo/translate" \
      --noproxy "*" \
      -F "q=hello world" \
      -F "from=en" \
@@ -209,7 +209,7 @@ The service provides full compatibility with Baidu Translate API. For developmen
 echo "AUTH__DISABLE_SIGNATURE_VALIDATION=true" >> .env
 
 # Example translation request (no valid signature required)
-curl -X POST "http://127.0.0.1:9002/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:8000/api/trans/vip/translate" \
      --noproxy "*" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world" \
@@ -224,7 +224,7 @@ curl -X POST "http://127.0.0.1:9002/api/trans/vip/translate" \
 
 ```bash
 # Example with proper signature calculation
-curl -X POST "http://127.0.0.1:9002/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:8000/api/trans/vip/translate" \
      --noproxy "*" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world" \
@@ -268,7 +268,7 @@ def create_signature(app_id, query, salt, secret):
 # Configuration
 APP_ID = "demo_app_id"
 APP_SECRET = "demo_app_secret"
-API_URL = "http://localhost:9002/api/trans/vip/translate"
+API_URL = "http://localhost:8000/api/trans/vip/translate"
 
 # Translation request
 query = "Hello, how are you today?"
@@ -309,7 +309,7 @@ print(f"Translation: {result}")
 **Solution**: Check that the service is running and the port is correct
 ```bash
 # Check if service is running
-curl --noproxy "*" "http://127.0.0.1:9002/api/health"
+curl --noproxy "*" "http://127.0.0.1:8000/api/health"
 
 # If using different port, check your .env file
 grep API__PORT .env
@@ -334,7 +334,7 @@ curl -H "Content-Type: application/x-www-form-urlencoded" -d "q=test&from=en&to=
 echo "AUTH__DISABLE_SIGNATURE_VALIDATION=true" >> .env
 
 # Use demo_app_id (not "test" or other values)
-curl -X POST "http://127.0.0.1:9002/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:8000/api/trans/vip/translate" \
   --noproxy "*" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "q=Hello&from=en&to=zh&appid=demo_app_id&salt=123&sign=dummy"
@@ -347,8 +347,8 @@ curl -X POST "http://127.0.0.1:9002/api/trans/vip/translate" \
 # 1. Verify Ollama is running
 ollama list
 
-# 2. Check if port 8888 is available
-lsof -i :9002
+# 2. Check if port 8000 is available
+lsof -i :8000
 
 # 3. Verify virtual environment is activated
 which python  # Should point to .venv/bin/python
@@ -390,7 +390,7 @@ MODEL_NAME=llama3.1:8b
 
 # Service Configuration
 API_HOST=0.0.0.0
-API_PORT=8888
+API_PORT=8000
 LOG_LEVEL=INFO
 
 # Redis Configuration (optional - graceful fallback available)
@@ -565,7 +565,7 @@ Returns list of supported language codes and names.
                                  │
                     ┌─────────────┴─────────────┐
                     │     FastAPI Server        │
-                    │   (Port 8888)             │
+                    │   (Port 8000)             │
                     │   - Authentication        │
                     │   - Rate Limiting         │
                     │   - Auto Documentation    │
@@ -655,7 +655,7 @@ The service includes comprehensive monitoring capabilities:
 **Metrics Collection**
 ```bash
 # View real-time metrics
-curl --noproxy "*" http://localhost:9002/api/metrics
+curl --noproxy "*" http://localhost:8000/api/metrics
 
 # Key metrics tracked:
 # - Request counts and success rates
@@ -691,7 +691,7 @@ curl --noproxy "*" http://localhost:9002/api/metrics
 scrape_configs:
   - job_name: 'llm-translation'
     static_configs:
-      - targets: ['localhost:9002']
+      - targets: ['localhost:8000']
     metrics_path: '/api/metrics'
 ```
 
@@ -703,19 +703,44 @@ scrape_configs:
 
 ### Running Tests
 
+Our test suite is organized into three categories for better maintainability:
+
 ```bash
 # Install test dependencies
 pip install pytest pytest-asyncio httpx pytest-cov
 
-# Run full test suite
-python -m pytest tests/ -v
+# Quick start - install all test dependencies
+python run_tests.py --install-deps
 
-# Run with coverage
-python -m pytest tests/ --cov=src --cov-report=html
+# Run different test categories
+python run_tests.py --unit           # Unit tests only
+python run_tests.py --integration    # Integration tests only  
+python run_tests.py --examples       # Example/demo tests only
+python run_tests.py --all            # All tests
+python run_tests.py --coverage       # All tests with coverage report
+python run_tests.py --lint           # Code quality checks
 
-# Run specific test categories
-python -m pytest tests/test_api.py -v  # API tests
-python -m pytest tests/test_translation_service.py -v  # Service tests
+# Traditional pytest commands still work
+python -m pytest tests/unit/ -v                    # Unit tests
+python -m pytest tests/integration/ -v             # Integration tests
+python -m pytest tests/ --cov=src --cov-report=html # Coverage report
+```
+
+#### Test Structure
+```
+tests/
+├── unit/                    # Unit tests (individual components)
+│   ├── test_api.py         # API endpoint tests
+│   ├── test_config.py      # Configuration loading tests
+│   └── test_ollama.py      # Ollama client tests
+├── integration/             # Integration tests (full system)
+│   ├── test_baidu_compatibility.py  # Baidu API compatibility
+│   ├── test_service.py     # Full service tests
+│   └── test_no_proxy.py    # Proxy-related tests
+└── examples/               # Demo and validation scripts
+    ├── simple_test.py      # Basic service verification
+    ├── quick_test.py       # Quick functionality check
+    └── validate.py         # Service validation
 ```
 
 ### Code Quality & Standards
@@ -754,7 +779,7 @@ pre-commit run --all-files
 2. **Run in Development Mode**:
    ```bash
    # Auto-reload on file changes
-   uvicorn src.main:app --host 0.0.0.0 --port 8888 --reload
+   uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
 3. **Testing New Features**:
@@ -865,7 +890,7 @@ spec:
       - name: translation-api
         image: llm-translation:latest
         ports:
-        - containerPort: 8888
+        - containerPort: 8000
         resources:
           requests:
             memory: "4Gi"
@@ -881,13 +906,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 8888
+            port: 8000
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health/ready
-            port: 8888
+            port: 8000
           initialDelaySeconds: 5
           periodSeconds: 5
 ```
@@ -1033,7 +1058,7 @@ print(f'Signature: {sign}')
 "
 
 # Check API credentials
-curl -X POST "http://localhost:9002/api/trans/vip/translate" \
+curl -X POST "http://localhost:8000/api/trans/vip/translate" \
      --noproxy "*" \
      -d "q=test&from=en&to=zh&appid=demo_app_id&salt=123&sign=<generated_sign>"
 ```
@@ -1042,14 +1067,14 @@ curl -X POST "http://localhost:9002/api/trans/vip/translate" \
 ```bash
 # Symptoms: "Address already in use" error
 
-# Find process using port 8888
-lsof -ti:9002
+# Find process using port 8000
+lsof -ti:8000
 
 # Kill existing process
-kill -9 $(lsof -ti:9002)
+kill -9 $(lsof -ti:8000)
 
 # Use different port
-export API_PORT=8889
+export API_PORT=8001
 python run.py
 ```
 
@@ -1082,10 +1107,10 @@ python run.py 2>&1 | jq .
 **Health Check Debug**
 ```bash
 # Detailed health information
-curl --noproxy "*" http://localhost:9002/health | jq .
+curl --noproxy "*" http://localhost:8000/health | jq .
 
 # Check individual services
-curl --noproxy "*" http://localhost:9002/health/detailed | jq .services
+curl --noproxy "*" http://localhost:8000/health/detailed | jq .services
 
 # Test Ollama connectivity directly
 curl --noproxy "*" http://localhost:11434/api/version
@@ -1177,9 +1202,39 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 📚 **Documentation**: Available at `/docs` when service is running
 - 🗨️ **Community**: [GitHub Discussions](https://github.com/phoenixjyb/llmytranslate/discussions)
 
+### 📚 Documentation
+
+**Complete documentation is available in the `docs/` directory:**
+
+- **Setup & Installation**: 
+  - [Production Setup Guide](docs/setup/PRODUCTION_SETUP_GUIDE.md) - Complete production deployment
+  - [Quick Start Production](docs/setup/QUICK_START_PRODUCTION.md) - Fast production setup
+  - [Windows Compatibility](docs/setup/WINDOWS_COMPATIBILITY_FINAL.md) - Windows-specific setup
+  - [Software Requirements](docs/setup/softwareRequirements.txt) - Required dependencies
+
+- **API Documentation**:
+  - [Client Examples](docs/api/CLIENT_EXAMPLES.md) - Usage examples and code samples
+  - [API Reference](http://localhost:8000/docs) - Interactive API documentation (when service is running)
+
+- **System Architecture**:
+  - [Software Design Document](docs/architecture/SOFTWARE_DESIGN_DOCUMENT.md) - Complete system design
+  - [System Architecture](docs/architecture/SYSTEM_ARCHITECTURE.md) - High-level architecture overview
+  - [Data Flow Diagram](docs/architecture/DATA_FLOW_DIAGRAM.md) - Data processing flow
+
+- **Guides & Tutorials**:
+  - [Router Setup Guide](docs/guides/ROUTER_SETUP_GUIDE.md) - Network configuration
+  - [Remote Access Guide](docs/guides/REMOTE_ACCESS_GUIDE.md) - Remote deployment setup
+  - [Testing Procedure](docs/guides/TESTING_PROCEDURE.md) - Comprehensive testing guide
+  - [Baidu API Compatibility](docs/guides/BAIDU_API_COMPATIBILITY.md) - API compatibility details
+
+- **Project Information**:
+  - [Contributing Guide](docs/CONTRIBUTING.md) - How to contribute to the project
+  - [Project Structure](docs/PROJECT_STRUCTURE.md) - Codebase organization
+  - [Project Organization](docs/PROJECT_ORGANIZATION.md) - Development workflow
+
 ### Getting Help
 
-1. **Check Documentation**: Visit `http://localhost:9002/docs` for API documentation
+1. **Check Documentation**: Browse the comprehensive docs above or visit `http://localhost:8000/docs` for API documentation
 2. **Search Issues**: Look through [existing issues](https://github.com/phoenixjyb/llmytranslate/issues)
 3. **Create Issue**: Report bugs or request features
 4. **Community Discussion**: Ask questions in discussions
@@ -1202,4 +1257,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **⚠️ Important Note**: This service is designed for local deployment and development use. For production deployment, ensure proper security measures, monitoring, resource allocation, and compliance with your organization's policies.
 
-**🚀 Quick Start**: Want to try it immediately? Run `./setup.sh && python run.py` and visit `http://localhost:9002/docs`!
+**🚀 Quick Start**: Want to try it immediately? Run `scripts/setup.ps1` (Windows) or `scripts/setup.sh` (Linux/Mac) and then `python run.py`, then visit `http://localhost:8000/docs`!

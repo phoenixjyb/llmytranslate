@@ -4,38 +4,12 @@ Network utilities for deployment mode management.
 
 import socket
 import ipaddress
-import platform
+import netifaces
 from typing import Optional, List, Dict, Any
 import logging
 import asyncio
 import json
 from datetime import datetime
-
-# OS-aware network interface handling
-USE_NETIFACES = False
-USE_PSUTIL = False
-
-try:
-    if platform.system() == "Windows":
-        # For Windows, use psutil if available, otherwise fallback to basic socket methods
-        try:
-            import psutil
-            USE_PSUTIL = True
-        except ImportError:
-            pass
-    else:
-        # For macOS/Linux, prefer netifaces
-        try:
-            import netifaces
-            USE_NETIFACES = True
-        except ImportError:
-            try:
-                import psutil
-                USE_PSUTIL = True
-            except ImportError:
-                pass
-except Exception:
-    pass
 
 logger = logging.getLogger(__name__)
 
