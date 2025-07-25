@@ -155,7 +155,34 @@ curl -X POST "https://abc123.ngrok.io/api/demo/translate" \
   -d "q=Hello world&from=en&to=zh"
 ```
 
-#### Option 3: Port Forwarding (Permanent Solution)
+#### Option 3: Permanent VPN Access (Using ZeroTier - Most Secure)
+
+1. **Install ZeroTier:**
+```powershell
+# Using Chocolatey
+choco install zerotier-one
+
+# Or download from https://www.zerotier.com/download/
+```
+
+2. **Create network at:** https://my.zerotier.com/
+3. **Join network on this computer:**
+```powershell
+zerotier-cli join YOUR_NETWORK_ID
+```
+
+4. **Authorize device in ZeroTier Central**
+5. **Install ZeroTier on remote devices and join same network**
+6. **Access using ZeroTier IP:**
+```bash
+# Use the ZeroTier IP assigned to your computer
+curl http://172.28.1.100:8000/api/health
+curl -X POST "http://172.28.1.100:8000/api/demo/translate" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "q=Hello world&from=en&to=zh"
+```
+
+#### Option 4: Port Forwarding (Permanent Solution)
 
 1. **Configure Windows Firewall:**
 ```powershell
@@ -179,6 +206,19 @@ curl http://YOUR_PUBLIC_IP:8000/api/health
 ```
 
 **⚠️ Security Note:** For production use, consider adding authentication, HTTPS, and restricting access to trusted IPs.
+
+### 🔍 **Comparison: Ngrok vs ZeroTier vs Port Forwarding**
+
+| Method | Ease of Setup | Security | Permanence | Cost |
+|--------|---------------|----------|------------|------|
+| **Ngrok** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | Free tier limited |
+| **ZeroTier** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Free up to 25 devices |
+| **Port Forward** | ⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | Free |
+
+**Recommendations:**
+- **Quick demos/testing:** Use Ngrok
+- **Permanent secure access:** Use ZeroTier  
+- **Public production service:** Use Port Forwarding + Nginx
 
 For detailed configuration options, see: `docs/guides/REMOTE_ACCESS_GUIDE.md`
 

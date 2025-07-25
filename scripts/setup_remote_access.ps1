@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("ngrok", "firewall", "local", "info")]
+    [ValidateSet("ngrok", "zerotier", "firewall", "local", "info")]
     [string]$Mode = "info"
 )
 
@@ -13,10 +13,14 @@ Write-Host "=" * 50 -ForegroundColor Green
 switch ($Mode) {
     "info" {
         Write-Host "`n📋 Available setup modes:" -ForegroundColor Yellow
-        Write-Host "  local    - Get local network access info" -ForegroundColor Cyan
-        Write-Host "  ngrok    - Set up ngrok tunnel for internet access" -ForegroundColor Cyan
-        Write-Host "  firewall - Configure Windows Firewall" -ForegroundColor Cyan
+        Write-Host "  local     - Get local network access info" -ForegroundColor Cyan
+        Write-Host "  ngrok     - Set up ngrok tunnel for internet access" -ForegroundColor Cyan
+        Write-Host "  zerotier  - Set up ZeroTier VPN for permanent access" -ForegroundColor Cyan
+        Write-Host "  firewall  - Configure Windows Firewall" -ForegroundColor Cyan
         Write-Host "`nUsage: .\setup_remote_access.ps1 [mode]" -ForegroundColor Gray
+        Write-Host "`n💡 Quick comparison:" -ForegroundColor Yellow
+        Write-Host "  Ngrok    = Easy demos, temporary access, public URLs" -ForegroundColor Gray
+        Write-Host "  ZeroTier = Permanent VPN, private network, multiple devices" -ForegroundColor Gray
     }
     
     "local" {
@@ -111,6 +115,68 @@ switch ($Mode) {
         Write-Host "   curl https://YOUR_NGROK_URL/api/health" -ForegroundColor Cyan
         
         Write-Host "`n💡 Ngrok will provide both HTTP and HTTPS URLs" -ForegroundColor Yellow
+    }
+    
+    "zerotier" {
+        Write-Host "`n🌐 ZeroTier VPN Setup" -ForegroundColor Yellow
+        Write-Host "=" * 25 -ForegroundColor Yellow
+        
+        # Check if ZeroTier is installed
+        $ztPath = Get-Command zerotier-cli -ErrorAction SilentlyContinue
+        
+        if (-not $ztPath) {
+            Write-Host "❌ ZeroTier not found. Installing..." -ForegroundColor Red
+            Write-Host "💡 Installing via Chocolatey..." -ForegroundColor Yellow
+            
+            # Check if chocolatey is available
+            $chocoPath = Get-Command choco -ErrorAction SilentlyContinue
+            if ($chocoPath) {
+                choco install zerotier-one -y
+            } else {
+                Write-Host "❌ Chocolatey not found. Please install ZeroTier manually:" -ForegroundColor Red
+                Write-Host "   1. Download from: https://www.zerotier.com/download/" -ForegroundColor Gray
+                Write-Host "   2. Install the client" -ForegroundColor Gray
+                Write-Host "   3. Create account and network at: https://my.zerotier.com/" -ForegroundColor Gray
+                return
+            }
+        }
+        
+        Write-Host "✅ ZeroTier found!" -ForegroundColor Green
+        Write-Host "`n🔧 Setup steps:" -ForegroundColor Yellow
+        Write-Host "1. Create account at: https://my.zerotier.com/" -ForegroundColor Gray
+        Write-Host "2. Create a new network (copy the Network ID)" -ForegroundColor Gray
+        Write-Host "3. Join network on this computer:" -ForegroundColor Gray
+        Write-Host "   zerotier-cli join YOUR_NETWORK_ID" -ForegroundColor Cyan
+        Write-Host "4. Authorize this device in ZeroTier Central" -ForegroundColor Gray
+        Write-Host "5. Install ZeroTier client on remote devices" -ForegroundColor Gray
+        Write-Host "6. Join same network on remote devices" -ForegroundColor Gray
+        Write-Host "7. Access service using ZeroTier IP:" -ForegroundColor Gray
+        Write-Host "   curl http://ZT_IP:8000/api/health" -ForegroundColor Cyan
+        
+        # Try to get current ZT status
+        try {
+            Write-Host "`n📊 Current ZeroTier status:" -ForegroundColor Yellow
+            $ztStatus = & zerotier-cli info 2>$null
+            if ($ztStatus) {
+                Write-Host "   $ztStatus" -ForegroundColor Cyan
+            }
+            
+            $ztNetworks = & zerotier-cli listnetworks 2>$null
+            if ($ztNetworks) {
+                Write-Host "`n🌐 Joined networks:" -ForegroundColor Yellow
+                Write-Host "   $ztNetworks" -ForegroundColor Cyan
+            } else {
+                Write-Host "`n⚠️  No networks joined yet" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "`n⚠️  ZeroTier service may not be running" -ForegroundColor Yellow
+        }
+        
+        Write-Host "`n💡 ZeroTier benefits:" -ForegroundColor Yellow
+        Write-Host "   - Permanent VPN connection" -ForegroundColor Gray
+        Write-Host "   - Private and secure" -ForegroundColor Gray
+        Write-Host "   - No port forwarding needed" -ForegroundColor Gray
+        Write-Host "   - Works across different networks" -ForegroundColor Gray
     }
 }
 
