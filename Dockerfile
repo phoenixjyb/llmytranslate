@@ -23,11 +23,11 @@ COPY .env.example .env
 RUN mkdir -p data
 
 # Expose ports
-EXPOSE 9000 8001
+EXPOSE 9002 8001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f --noproxy "*" http://localhost:9000/api/health || exit 1
+    CMD curl -f --noproxy "*" http://localhost:9002/api/health || exit 1
 
 # Run the application
 CMD ["python", "run.py"]

@@ -9,7 +9,7 @@ import os
 
 def test_service():
     """Test the llmYTranslate service endpoints."""
-    base_url = "http://127.0.0.1:9000"
+    base_url = "http://127.0.0.1:9002"
     
     # Disable proxy for localhost testing
     proxies = {

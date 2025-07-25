@@ -31,7 +31,7 @@ def test_service_no_proxy():
         # Test 1: Health Check
         print("\n1. Testing Health Endpoint...")
         try:
-            url = "http://127.0.0.1:9000/api/health"
+            url = "http://127.0.0.1:9002/api/health"
             with urllib.request.urlopen(url) as response:
                 data = json.loads(response.read().decode())
                 print(f"   ✅ Health Status: {data['status']}")
@@ -42,7 +42,7 @@ def test_service_no_proxy():
         # Test 2: Demo Translation
         print("\n2. Testing Demo Translation...")
         try:
-            url = "http://127.0.0.1:9000/api/demo/translate"
+            url = "http://127.0.0.1:9002/api/demo/translate"
             data = urllib.parse.urlencode({
                 'q': 'Hello world, how are you?',
                 'from': 'en',
@@ -63,7 +63,7 @@ def test_service_no_proxy():
         # Test 3: Service Discovery
         print("\n3. Testing Service Discovery...")
         try:
-            url = "http://127.0.0.1:9000/api/discovery/info"
+            url = "http://127.0.0.1:9002/api/discovery/info"
             with urllib.request.urlopen(url) as response:
                 data = json.loads(response.read().decode())
                 print(f"   ✅ Discovery working!")

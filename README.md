@@ -142,7 +142,7 @@ python discover_service.py --discover
 python discover_service.py --best
 
 # Test a specific service
-python discover_service.py --test http://192.168.1.100:9000
+python discover_service.py --test http://192.168.1.100:9002
 ```
 
 ### Integration with systemDesign
@@ -150,13 +150,13 @@ The service provides automatic discovery endpoints that systemDesign can use:
 
 ```bash
 # Get service information
-curl --noproxy "*" http://your-service:9000/api/discovery/info
+curl --noproxy "*" http://your-service:9002/api/discovery/info
 
 # Test connectivity
-curl --noproxy "*" http://your-service:9000/api/discovery/network
+curl --noproxy "*" http://your-service:9002/api/discovery/network
 
 # Discover other services on network
-curl --noproxy "*" http://your-service:9000/api/discovery/discover
+curl --noproxy "*" http://your-service:9002/api/discovery/discover
 ```
 
 ## ⚙️ Configuration
@@ -191,7 +191,7 @@ DEBUG=false
 ### Demo Translation (No Authentication Required)
 
 ```bash
-curl -X POST "http://localhost:9000/api/demo/translate" \
+curl -X POST "http://localhost:9002/api/demo/translate" \
      --noproxy "*" \
      -F "q=hello world" \
      -F "from=en" \
@@ -209,7 +209,7 @@ The service provides full compatibility with Baidu Translate API. For developmen
 echo "AUTH__DISABLE_SIGNATURE_VALIDATION=true" >> .env
 
 # Example translation request (no valid signature required)
-curl -X POST "http://127.0.0.1:9000/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:9002/api/trans/vip/translate" \
      --noproxy "*" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world" \
@@ -224,7 +224,7 @@ curl -X POST "http://127.0.0.1:9000/api/trans/vip/translate" \
 
 ```bash
 # Example with proper signature calculation
-curl -X POST "http://127.0.0.1:9000/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:9002/api/trans/vip/translate" \
      --noproxy "*" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=Hello world" \
@@ -268,7 +268,7 @@ def create_signature(app_id, query, salt, secret):
 # Configuration
 APP_ID = "demo_app_id"
 APP_SECRET = "demo_app_secret"
-API_URL = "http://localhost:9000/api/trans/vip/translate"
+API_URL = "http://localhost:9002/api/trans/vip/translate"
 
 # Translation request
 query = "Hello, how are you today?"
@@ -309,7 +309,7 @@ print(f"Translation: {result}")
 **Solution**: Check that the service is running and the port is correct
 ```bash
 # Check if service is running
-curl --noproxy "*" "http://127.0.0.1:9000/api/health"
+curl --noproxy "*" "http://127.0.0.1:9002/api/health"
 
 # If using different port, check your .env file
 grep API__PORT .env
@@ -334,7 +334,7 @@ curl -H "Content-Type: application/x-www-form-urlencoded" -d "q=test&from=en&to=
 echo "AUTH__DISABLE_SIGNATURE_VALIDATION=true" >> .env
 
 # Use demo_app_id (not "test" or other values)
-curl -X POST "http://127.0.0.1:9000/api/trans/vip/translate" \
+curl -X POST "http://127.0.0.1:9002/api/trans/vip/translate" \
   --noproxy "*" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "q=Hello&from=en&to=zh&appid=demo_app_id&salt=123&sign=dummy"
@@ -348,7 +348,7 @@ curl -X POST "http://127.0.0.1:9000/api/trans/vip/translate" \
 ollama list
 
 # 2. Check if port 8888 is available
-lsof -i :9000
+lsof -i :9002
 
 # 3. Verify virtual environment is activated
 which python  # Should point to .venv/bin/python
@@ -655,7 +655,7 @@ The service includes comprehensive monitoring capabilities:
 **Metrics Collection**
 ```bash
 # View real-time metrics
-curl --noproxy "*" http://localhost:9000/api/metrics
+curl --noproxy "*" http://localhost:9002/api/metrics
 
 # Key metrics tracked:
 # - Request counts and success rates
@@ -691,7 +691,7 @@ curl --noproxy "*" http://localhost:9000/api/metrics
 scrape_configs:
   - job_name: 'llm-translation'
     static_configs:
-      - targets: ['localhost:9000']
+      - targets: ['localhost:9002']
     metrics_path: '/api/metrics'
 ```
 
@@ -1033,7 +1033,7 @@ print(f'Signature: {sign}')
 "
 
 # Check API credentials
-curl -X POST "http://localhost:9000/api/trans/vip/translate" \
+curl -X POST "http://localhost:9002/api/trans/vip/translate" \
      --noproxy "*" \
      -d "q=test&from=en&to=zh&appid=demo_app_id&salt=123&sign=<generated_sign>"
 ```
@@ -1043,10 +1043,10 @@ curl -X POST "http://localhost:9000/api/trans/vip/translate" \
 # Symptoms: "Address already in use" error
 
 # Find process using port 8888
-lsof -ti:9000
+lsof -ti:9002
 
 # Kill existing process
-kill -9 $(lsof -ti:9000)
+kill -9 $(lsof -ti:9002)
 
 # Use different port
 export API_PORT=8889
@@ -1082,10 +1082,10 @@ python run.py 2>&1 | jq .
 **Health Check Debug**
 ```bash
 # Detailed health information
-curl --noproxy "*" http://localhost:9000/health | jq .
+curl --noproxy "*" http://localhost:9002/health | jq .
 
 # Check individual services
-curl --noproxy "*" http://localhost:9000/health/detailed | jq .services
+curl --noproxy "*" http://localhost:9002/health/detailed | jq .services
 
 # Test Ollama connectivity directly
 curl --noproxy "*" http://localhost:11434/api/version
@@ -1179,7 +1179,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Getting Help
 
-1. **Check Documentation**: Visit `http://localhost:9000/docs` for API documentation
+1. **Check Documentation**: Visit `http://localhost:9002/docs` for API documentation
 2. **Search Issues**: Look through [existing issues](https://github.com/phoenixjyb/llmytranslate/issues)
 3. **Create Issue**: Report bugs or request features
 4. **Community Discussion**: Ask questions in discussions
@@ -1202,4 +1202,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **⚠️ Important Note**: This service is designed for local deployment and development use. For production deployment, ensure proper security measures, monitoring, resource allocation, and compliance with your organization's policies.
 
-**🚀 Quick Start**: Want to try it immediately? Run `./setup.sh && python run.py` and visit `http://localhost:9000/docs`!
+**🚀 Quick Start**: Want to try it immediately? Run `./setup.sh && python run.py` and visit `http://localhost:9002/docs`!

@@ -1,5 +1,5 @@
 #!/usr/bin/en# Configuration
-BASE_URL = "http://localhost:9000"python3
+BASE_URL = "http://localhost:9002"
 """
 Validation script to test the LLM Translation Service.
 """
