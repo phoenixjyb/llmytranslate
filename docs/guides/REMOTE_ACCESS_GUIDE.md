@@ -27,7 +27,8 @@ DEBUG=true
 
 ```powershell
 # Using startup script
-.\start-service.ps1 -Port 8000
+# Start the service
+.\scripts\start-service.ps1 -Port 8000
 
 # Or manually
 .\.venv\Scripts\python.exe run.py

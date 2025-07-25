@@ -27,19 +27,19 @@ This directory contains multiple startup scripts for the LLM Translation Service
 #### Usage:
 ```powershell
 # Basic startup with network access
-.\start-service.ps1
+.\scripts\start-service.ps1
 
 # Show detailed network configuration
-.\start-service.ps1 -NetworkInfo
+.\scripts\start-service.ps1 -NetworkInfo
 
 # Configuration test only
-.\start-service.ps1 -ConfigTest
+.\scripts\start-service.ps1 -ConfigTest
 
 # Custom port with debug and network info
-.\start-service.ps1 -Port 8080 -Debug -NetworkInfo
+.\scripts\start-service.ps1 -Port 8080 -Debug -NetworkInfo
 
 # Get help
-Get-Help .\start-service.ps1 -Full
+Get-Help .\scripts\start-service.ps1 -Full
 ```
 
 ### 2. `service-manager.ps1` (Service Management) 🔧
