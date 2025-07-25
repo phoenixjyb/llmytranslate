@@ -109,11 +109,86 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/demo/translate" -Method Post -
 4. **Service Status:** Always check `/api/health` first to ensure service is running
 5. **Documentation:** Visit `/docs` for interactive API documentation
 
+## Remote Access from Outside Networks
+
+### Quick Setup for External Access
+
+#### Option 1: Simple Network Access (Local Network)
+If you want to access from other devices on your local network:
+
+1. **Find your local IP:**
+```bash
+ipconfig | findstr IPv4
+```
+
+2. **Access from other devices on same network:**
+```bash
+# Replace 192.168.1.100 with your actual local IP
+curl http://192.168.1.100:8000/api/health
+curl -X POST "http://192.168.1.100:8000/api/demo/translate" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "q=Hello world&from=en&to=zh"
+```
+
+#### Option 2: Internet Access (Using Ngrok - Easiest)
+
+1. **Install ngrok:**
+```powershell
+# Using Chocolatey
+choco install ngrok
+
+# Or download from https://ngrok.com/
+```
+
+2. **Start your translation service locally**
+3. **Create public tunnel:**
+```powershell
+ngrok http 8000
+```
+
+4. **Use the ngrok URL (example):**
+```bash
+# Ngrok will provide a URL like: https://abc123.ngrok.io
+curl https://abc123.ngrok.io/api/health
+curl -X POST "https://abc123.ngrok.io/api/demo/translate" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "q=Hello world&from=en&to=zh"
+```
+
+#### Option 3: Port Forwarding (Permanent Solution)
+
+1. **Configure Windows Firewall:**
+```powershell
+New-NetFirewallRule -DisplayName "LLM Translation Service" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
+```
+
+2. **Set up router port forwarding:**
+   - External Port: 8000
+   - Internal IP: Your PC's local IP
+   - Internal Port: 8000
+
+3. **Find your public IP:**
+```powershell
+(Invoke-WebRequest -UseBasicParsing "http://ipinfo.io/ip").Content.Trim()
+```
+
+4. **Access from anywhere:**
+```bash
+# Replace YOUR_PUBLIC_IP with your actual public IP
+curl http://YOUR_PUBLIC_IP:8000/api/health
+```
+
+**⚠️ Security Note:** For production use, consider adding authentication, HTTPS, and restricting access to trusted IPs.
+
+For detailed configuration options, see: `docs/guides/REMOTE_ACCESS_GUIDE.md`
+
 ## Troubleshooting
 
 - **404 Not Found:** Check endpoint path (remember `/api/` prefix)
 - **Field Required:** Ensure all required parameters are included
 - **Service Unavailable:** Check if service is running on port 8000
 - **Invalid Response:** Verify Content-Type header for form submissions
+- **Connection Refused (Remote):** Check firewall settings and port forwarding
+- **Timeout (Remote):** Verify your public IP and ensure router port forwarding is correct
 
 Last updated: July 25, 2025
