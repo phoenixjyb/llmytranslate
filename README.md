@@ -18,6 +18,8 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
 - 📝 **Auto Documentation**: Interactive API documentation with FastAPI/OpenAPI
 - 🌐 **Deployment Modes**: Local and remote deployment with service discovery
 - 🔍 **Service Discovery**: Automatic detection and connection of translation services
+- 🛑 **Service Management**: Comprehensive start/stop scripts for all platforms
+- 🚇 **Remote Access**: Built-in ngrok integration for worldwide access (tested from remote networks)
 
 ## 📋 Deployment Modes
 
@@ -105,6 +107,84 @@ cd llmYTranslate
    source .venv/bin/activate
    python run.py
    ```
+
+## 🔧 Service Management
+
+### Quick Service Commands
+
+#### Starting Services
+```powershell
+# Windows - Start translation service
+.\start-service.ps1
+
+# Windows - Start with options
+.\start-service.ps1 -Production    # Production mode
+.\start-service.ps1 -Debug         # Debug mode with verbose output
+.\start-service.ps1 -Force         # Force start (ignore conflicts)
+
+# Unix/Linux/macOS
+./scripts/start-service.sh
+```
+
+#### Stopping Services
+```powershell
+# Windows - Stop all services (translation + ngrok)
+.\stop-service.ps1
+
+# Windows - Stop with options
+.\stop-service.ps1 -Force          # Force stop
+.\stop-service.ps1 -NgrokOnly       # Stop only ngrok tunnel
+.\stop-service.ps1 -ServiceOnly     # Stop only translation service
+.\stop-service.ps1 -Verbose        # Detailed output
+
+# Unix/Linux/macOS
+./scripts/stop-service.sh --force   # Force stop all
+./scripts/stop-service.sh --ngrok-only    # Stop only ngrok
+```
+
+### Remote Access Setup
+
+#### Ngrok Tunnel (Easiest for Testing)
+```powershell
+# 1. Setup ngrok authentication (first time only)
+.\scripts\setup_ngrok.ps1 YOUR_AUTH_TOKEN
+
+# 2. Start translation service
+.\start-service.ps1
+
+# 3. Start ngrok tunnel in another terminal
+ngrok http 8000
+
+# Your service is now accessible worldwide via the ngrok URL!
+```
+
+#### Complete Workflow
+```powershell
+# Start everything
+.\start-service.ps1
+ngrok http 8000
+
+# Test remote access (replace with your ngrok URL)
+curl -H "ngrok-skip-browser-warning: true" https://abc123.ngrok-free.app/api/health
+
+# Stop everything when done
+.\stop-service.ps1
+```
+
+### Service Status & Health Checks
+```bash
+# Check service health
+curl http://localhost:8000/api/health
+
+# Validate installation
+python validate.py
+
+# Test Ollama connectivity
+python test_ollama_connectivity.py
+
+# Service discovery
+python discover_service.py
+```
 
 ## 🐳 Docker Deployment
 
@@ -1115,6 +1195,74 @@ curl --noproxy "*" http://localhost:8000/health/detailed | jq .services
 # Test Ollama connectivity directly
 curl --noproxy "*" http://localhost:11434/api/version
 ```
+
+## 📜 Scripts Reference
+
+The project includes comprehensive automation scripts for all platforms:
+
+### Service Management
+- **`start-service.ps1`** / **`scripts/start-service.sh`** - Start translation service
+- **`stop-service.ps1`** / **`scripts/stop-service.sh`** - Stop all services
+- **`scripts/service-manager.ps1`** - Advanced service management
+
+### Setup & Configuration
+- **`scripts/setup.ps1`** / **`scripts/setup.sh`** - Environment setup
+- **`scripts/production-setup.ps1`** - Production deployment setup
+- **`scripts/configure-remote-access.ps1`** - Remote access configuration
+- **`scripts/setup_ngrok.ps1`** - Ngrok tunnel setup
+
+### Deployment
+- **`scripts/deploy-online.ps1`** / **`scripts/deploy.sh`** - Deployment automation
+- **`deploy-online.ps1`** - Quick deployment launcher
+
+### Testing & Validation
+- **`scripts/test_endpoints.ps1`** / **`scripts/test_endpoints.sh`** - API testing
+- **`run_tests.py`** - Comprehensive test runner
+- **`validate.py`** - Service validation
+- **`test_ollama_connectivity.py`** - Ollama connectivity tests
+
+### Utilities
+- **`discover_service.py`** - Service discovery and network scanning
+- **`scripts/git_helper.ps1`** - Git operations and helpers
+- **`scripts/add_ollama_to_path.*`** - PATH management
+
+### Platform Support
+- **Windows**: PowerShell scripts (`.ps1`) and Batch files (`.bat`)
+- **Unix/Linux/macOS**: Shell scripts (`.sh`)
+- **Cross-platform**: Python utilities work everywhere
+
+### Usage Examples
+```powershell
+# Complete setup workflow
+.\scripts\setup.ps1
+.\start-service.ps1
+ngrok http 8000
+
+# Development workflow
+.\start-service.ps1 -Debug
+.\scripts\test_endpoints.ps1
+.\stop-service.ps1
+
+# Production workflow
+.\scripts\production-setup.ps1
+.\start-service.ps1 -Production
+.\scripts\configure-remote-access.ps1
+```
+
+## 📚 Documentation Structure
+
+Comprehensive documentation is organized in `docs/`:
+
+- **`docs/api/`** - API documentation and examples
+- **`docs/architecture/`** - System design and architecture
+- **`docs/guides/`** - User guides and tutorials
+- **`docs/setup/`** - Detailed setup instructions
+
+Key documents:
+- **`docs/PROJECT_STRUCTURE.md`** - Complete project structure
+- **`docs/guides/REMOTE_ACCESS_GUIDE.md`** - Remote access setup
+- **`docs/guides/SERVICE_STOP_GUIDE.md`** - Service management
+- **`STARTUP_SCRIPTS.md`** - Complete script usage guide
 
 ## 🤝 Contributing
 
