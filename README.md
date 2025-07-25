@@ -57,69 +57,83 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
    
    # Windows: Download from https://ollama.ai/
    # Then pull a model for translation
+   ollama serve  # Start Ollama service
    ollama pull llama3.1:8b
    # Alternative models: gemma3:latest, qwen2.5vl:7b
    ```
 
-4. **Configure environment variables**:
+5. **Configure environment variables**:
    ```bash
    # Copy example environment file
-   cp .env.example .env
+   cp config/.env.example .env
    
    # Edit .env file to set:
-   # AUTH__DISABLE_SIGNATURE_VALIDATION=true  # For development
-   # OLLAMA__MODEL_NAME=llava:latest          # Your preferred model
+   ENVIRONMENT=development
+   DEBUG=true
+   API__HOST=0.0.0.0
+   API__PORT=8000
    ```
 
-5. **Start the service**:
+   **⚠️ Important Note**: If you have Ollama installed via installer, you may have a system environment variable `ollama` that conflicts with the service configuration. Clear it before starting:
+   ```powershell
+   # Windows PowerShell
+   Remove-Item Env:\ollama -ErrorAction SilentlyContinue
+   ```
+
+6. **Start the service**:
    
    **🚀 Easy Startup (Recommended)**:
    ```powershell
-   # Windows PowerShell (validates everything and starts service)
-   .\start-service.ps1
+   # Windows PowerShell - Start service with virtual environment
+   Remove-Item Env:\ollama -ErrorAction SilentlyContinue  # Clear conflicting env var
+   .\.venv\Scripts\python.exe run.py
+7. **Access the service**:
    
-   # Windows Batch (simple version)
-   start-service.bat
+   Once started, the service will be available at:
+   - **Local access**: `http://localhost:8000`
+   - **Local network access**: `http://[YOUR_LOCAL_IP]:8000` (e.g., `http://192.168.0.108:8000`)
+   - **API Documentation**: `http://localhost:8000/docs`
+   - **Health Check**: `http://localhost:8000/api/health`
    
-   # Linux/macOS
-   ./start-service.sh
-   ```
-   
-   **Manual Startup**:
-   ```bash
-   source .venv/bin/activate
-   python run.py
-   ```
-   
-   📖 **For detailed startup procedures**: See [`STARTUP_SCRIPTS.md`](./STARTUP_SCRIPTS.md) and [`TESTING_PROCEDURE.md`](./TESTING_PROCEDURE.md)
+   **🌐 Network Access Verified**: The service is configured to accept connections from all network interfaces (`0.0.0.0:8000`), making it accessible from other devices on your local network.
 
-6. **Verify installation**:
+8. **Verify installation**:
    ```bash
    # Test health endpoint
-   curl --noproxy "*" "http://127.0.0.1:8888/api/health"
+   curl http://localhost:8000/api/health
    
-   # Test translation (using demo credentials)
-   curl --noproxy "*" -X POST "http://127.0.0.1:8888/api/trans/vip/translate" \
-     -H "Content-Type: application/x-www-form-urlencoded" \
-     -d "q=Hello world&from=en&to=zh&appid=demo_app_id&salt=1234567890&sign=dummy"
+   # Test from local network (replace with your IP)
+   curl http://192.168.0.108:8000/api/health
    ```
 
 ### 🌐 Internet-Accessible Server Setup
 
-Want to make your Windows PC serve as a translation server accessible from anywhere? 
+✅ **Local Network Access Achieved**: Your service is now accessible from devices on your local network!
 
-```powershell
-# Run production setup (as Administrator)
-.\scripts\production-setup.ps1 -EnableHTTPS -InstallNginx
-```
+For **internet access**, follow these steps:
 
-This sets up:
-- ✅ **Security**: Rate limiting, firewalls, monitoring
-- ✅ **Performance**: Nginx reverse proxy, caching
-- ✅ **Accessibility**: Router configuration guides
-- ✅ **Monitoring**: Health checks and logging
+1. **Automated Setup** (Recommended):
+   ```powershell
+   # Configure firewall and network settings
+   .\deploy-online.ps1
+   ```
 
-📖 **Full Guide**: See `docs/PRODUCTION_SETUP_GUIDE.md` for complete instructions
+2. **Router Configuration**:
+   - Access your router admin panel (usually `http://192.168.0.1` or `http://192.168.1.1`)
+   - Set up **Port Forwarding**:
+     - External Port: `8080` (your choice)
+     - Internal IP: `[YOUR_LOCAL_IP]` (e.g., `192.168.0.108`)
+     - Internal Port: `8000`
+     - Protocol: `TCP`
+
+3. **Internet Access URLs** (after router setup):
+   - Main service: `http://[YOUR_PUBLIC_IP]:8080`
+   - API docs: `http://[YOUR_PUBLIC_IP]:8080/docs`
+
+📖 **Detailed Guides**: 
+- `docs/PRODUCTION_SETUP_GUIDE.md` - Complete production setup
+- `docs/ROUTER_SETUP_GUIDE.md` - Router configuration
+- `REMOTE_ACCESS_GUIDE.md` - Internet access setup
 
 ## 🐳 Docker Deployment
 
@@ -137,7 +151,21 @@ docker exec llm-ollama ollama pull llama3.1:8b
 docker-compose logs -f
 ```
 
-## 🔧 API Usage
+## � Documentation
+
+### Quick References
+- **🚀 [Quick Network Access Guide](QUICK_NETWORK_ACCESS.md)** - ✅ Local & Internet Access Setup (NEW!)
+- **📋 [Quick Start Production](QUICK_START_PRODUCTION.md)** - Fast production deployment
+- **🛠️ [Startup Scripts Guide](STARTUP_SCRIPTS.md)** - Service management commands
+
+### Detailed Guides
+- **🔧 [Production Setup Guide](docs/PRODUCTION_SETUP_GUIDE.md)** - Comprehensive production setup
+- **🌐 [Router Setup Guide](docs/ROUTER_SETUP_GUIDE.md)** - Router configuration for internet access
+- **🧪 [Testing Procedures](TESTING_PROCEDURE.md)** - Testing and validation procedures
+- **📊 [Client Examples](CLIENT_EXAMPLES.md)** - API usage examples and integration guides
+- **🏗️ [System Architecture](docs/SYSTEM_ARCHITECTURE.md)** - Technical architecture overview
+
+## �🔧 API Usage
 
 ### Demo Translation (No Authentication Required)
 

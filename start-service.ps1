@@ -1,14 +1,15 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Complete startup script for LLM Translation Service
+    Complete startup script for LLM Translation Service with Network Access
     
 .DESCRIPTION
     This script handles all the setup and startup procedures for the LLM Translation Service:
     - Validates prerequisites (Ollama, Python, project structure)
-    - Handles environment variable conflicts
+    - Handles environment variable conflicts (especially the 'ollama' system variable)
     - Tests configuration loading
-    - Starts the translation service
+    - Starts the translation service with network access enabled
+    - Provides network access information for local and internet connectivity
     
 .PARAMETER ConfigTest
     Only run configuration test without starting the service
@@ -19,23 +20,27 @@
 .PARAMETER Debug
     Enable debug mode with verbose output
     
+.PARAMETER NetworkInfo
+    Display network configuration and access URLs
+    
 .EXAMPLE
     .\start-service.ps1
-    Start the service with default settings
+    Start the service with default settings and network access
     
 .EXAMPLE
     .\start-service.ps1 -ConfigTest
     Only test configuration without starting service
     
 .EXAMPLE
-    .\start-service.ps1 -Port 8080 -Debug
-    Start service on port 8080 with debug output
+    .\start-service.ps1 -Port 8080 -Debug -NetworkInfo
+    Start service on port 8080 with debug output and network information
 #>
 
 param(
     [switch]$ConfigTest,
     [int]$Port = 8000,
-    [switch]$Debug
+    [switch]$Debug,
+    [switch]$NetworkInfo
 )
 
 # Color output functions
@@ -183,6 +188,63 @@ function Start-TranslationService {
     }
 }
 
+# Function to show network access information
+function Show-NetworkInfo {
+    Write-Step "Getting network access information..."
+    
+    # Get local IP addresses
+    $networkAdapters = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
+        $_.IPAddress -ne "127.0.0.1" -and $_.AddressState -eq "Preferred" 
+    }
+    
+    Write-Host @"
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                              🌐 Network Access Information                    ║
+╠════════════════════════════════════════════════════════════════════════════════╣
+║                                                                                ║
+║ 📱 Local Network Access URLs:                                                 ║
+"@ -ForegroundColor Green
+    
+    foreach ($adapter in $networkAdapters) {
+        $interfaceAlias = (Get-NetAdapter -InterfaceIndex $adapter.InterfaceIndex -ErrorAction SilentlyContinue).Name
+        Write-Host "║   • http://$($adapter.IPAddress):$Port" -ForegroundColor White
+        Write-Host "║   • http://$($adapter.IPAddress):$Port/docs (API Documentation)" -ForegroundColor White
+        if ($interfaceAlias) {
+            Write-Host "║     Interface: $interfaceAlias" -ForegroundColor Gray
+        }
+        Write-Host "║" -ForegroundColor Green
+    }
+    
+    # Try to get public IP
+    try {
+        $publicIP = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 5).Content.Trim()
+        Write-Host @"
+║ 🌍 Public IP Address: $publicIP                                               ║
+║                                                                                ║
+║ 🔧 For Internet Access:                                                       ║
+║   1. Configure router port forwarding:                                        ║
+║      External Port: 8080 -> Internal IP: $($networkAdapters[0].IPAddress):$Port           ║
+║   2. Internet URLs (after router setup):                                      ║
+║      • http://$publicIP:8080                                                 ║
+║      • http://$publicIP:8080/docs                                            ║
+║                                                                                ║
+║ 📖 Run .\deploy-online.ps1 for automated internet setup                      ║
+"@ -ForegroundColor Green
+    } catch {
+        Write-Host @"
+║ ⚠️  Could not retrieve public IP address                                      ║
+║                                                                                ║
+║ 🔧 For Internet Access:                                                       ║
+║   1. Run .\deploy-online.ps1 for detailed setup instructions                 ║
+║   2. Configure router port forwarding for external access                     ║
+"@ -ForegroundColor Yellow
+    }
+    
+    Write-Host @"
+╚════════════════════════════════════════════════════════════════════════════════╝
+"@ -ForegroundColor Green
+}
+
 # Function to display helpful information
 function Show-ServiceInfo {
     Write-Host @"
@@ -200,6 +262,26 @@ function Show-ServiceInfo {
 ║      -d "q=hello world&from=en&to=zh"                                         ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 "@ -ForegroundColor Cyan
+    
+    # Show network information if requested or always show basic network info
+    Write-Host ""
+    if ($NetworkInfo) {
+        Show-NetworkInfo
+    } else {
+        # Show basic network info by default
+        $networkAdapters = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
+            $_.IPAddress -ne "127.0.0.1" -and $_.AddressState -eq "Preferred" 
+        }
+        if ($networkAdapters) {
+            $localIP = ($networkAdapters | Select-Object -First 1).IPAddress
+            Write-Host @"
+╔════════════════════════════════════════════════════════════════════════════════╗
+║ 🌐 Network Access: http://$localIP:$Port                          ║
+║ 📖 Use -NetworkInfo for detailed network configuration                        ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+"@ -ForegroundColor Green
+        }
+    }
 }
 
 # Main execution
