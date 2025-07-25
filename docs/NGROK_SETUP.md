@@ -1,4 +1,7 @@
-# 🚇 Quick Ngrok Setup Guide
+# 🚇 Quick Ngrok Setup Guide (Windows Store Version)
+
+## Prerequisites
+✅ You already have ngrok 3.24 installed via Windows Store
 
 ## Step 1: Get Auth Token
 1. Go to: https://dashboard.ngrok.com/signup
@@ -8,13 +11,13 @@
 ## Step 2: Configure Ngrok
 ```powershell
 # Replace YOUR_AUTH_TOKEN with your actual token
-C:\Users\yanbo\AppData\Local\Microsoft\WinGet\Links\ngrok.exe config add-authtoken YOUR_AUTH_TOKEN
+ngrok config add-authtoken YOUR_AUTH_TOKEN
 ```
 
 ## Step 3: Start Tunnel
 ```powershell
 # Start ngrok tunnel
-C:\Users\yanbo\AppData\Local\Microsoft\WinGet\Links\ngrok.exe http 8000
+ngrok http 8000
 ```
 
 ## Step 4: Test Your Service
