@@ -5,6 +5,7 @@ Ollama client service for LLM communication.
 import asyncio
 import json
 import hashlib
+import time
 from typing import Optional, Dict, Any
 import httpx
 from structlog import get_logger
@@ -100,28 +101,51 @@ class OllamaClient:
                 )
                 
                 # Create a temporary client for this request without proxy
+                start_time = time.time()
+                connection_start = time.time()
+                
                 async with httpx.AsyncClient(
                     timeout=httpx.Timeout(self.timeout),
                     trust_env=False  # Don't use environment proxy settings
                 ) as client:
+                    connection_time = time.time() - connection_start
+                    inference_start = time.time()
+                    
                     response = await client.post(
                         f"{self.base_url}/api/generate",
                         json=request_data.dict(),
                     )
                 
+                inference_time = time.time() - inference_start
+                
                 if response.status_code == 200:
+                    parsing_start = time.time()
                     result = response.json()
                     ollama_response = OllamaResponse(**result)
                     
                     # Extract the translation from the response
                     translation = self._extract_translation(ollama_response.response)
+                    parsing_time = time.time() - parsing_start
+                    
+                    # Detailed timing breakdown
+                    total_time = time.time() - start_time
                     
                     return {
                         "translation": translation,
                         "model": ollama_response.model,
                         "input_tokens": ollama_response.prompt_eval_count or 0,
                         "output_tokens": ollama_response.eval_count or 0,
-                        "response_time": (ollama_response.total_duration or 0) / 1e9,  # Convert to seconds
+                        "response_time": total_time,
+                        "detailed_timing": {
+                            "connection_ms": round(connection_time * 1000, 2),
+                            "inference_ms": round(inference_time * 1000, 2),
+                            "parsing_ms": round(parsing_time * 1000, 2),
+                            "total_ms": round(total_time * 1000, 2),
+                            "ollama_load_duration_ms": round((ollama_response.load_duration or 0) / 1e6, 2),
+                            "ollama_prompt_eval_ms": round((ollama_response.prompt_eval_duration or 0) / 1e6, 2),
+                            "ollama_eval_ms": round((ollama_response.eval_duration or 0) / 1e6, 2),
+                            "ollama_total_ms": round((ollama_response.total_duration or 0) / 1e6, 2)
+                        },
                         "success": True
                     }
                 else:

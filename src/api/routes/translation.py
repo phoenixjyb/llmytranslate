@@ -190,7 +190,13 @@ async def translate_text(
 @router.get("/languages", response_model=SupportedLanguagesResponse)
 async def get_supported_languages() -> SupportedLanguagesResponse:
     """Get list of supported languages."""
-    return SupportedLanguagesResponse()
+    return SupportedLanguagesResponse(
+        languages={
+            "en": "English",
+            "zh": "Chinese", 
+            "auto": "Auto-detect"
+        }
+    )
 
 
 @router.post("/demo/translate")
@@ -203,9 +209,13 @@ async def demo_translate(
     Demo translation endpoint that generates proper signature for testing.
     
     This endpoint is useful for testing the service without needing to 
-    calculate signatures manually.
+    calculate signatures manually. Includes detailed timing breakdown.
     """
+    import time
+    
     try:
+        start_time = time.time()
+        
         # Generate demo request with proper signature
         demo_request = auth_service.generate_demo_request(q, from_lang, to_lang)
         
@@ -221,10 +231,30 @@ async def demo_translate(
         # Perform translation
         result = await translation_service.translate(translation_request)
         
-        return {
+        total_time = time.time() - start_time
+        
+        # Extract timing information if available
+        timing_breakdown = None
+        if hasattr(result, '__dict__') and 'timing_breakdown' in result.__dict__:
+            timing_breakdown = result.__dict__['timing_breakdown']
+        elif hasattr(result, 'timing_breakdown'):
+            timing_breakdown = result.timing_breakdown
+        
+        # Debug: print what we have
+        print(f"DEBUG - Result type: {type(result)}")
+        print(f"DEBUG - Result dict: {result.__dict__ if hasattr(result, '__dict__') else 'No __dict__'}")
+        print(f"DEBUG - Timing breakdown: {timing_breakdown}")
+        
+        response_data = {
             "request": demo_request,
-            "response": result.dict()
+            "response": result.dict(),
+            "performance": {
+                "total_time_ms": round(total_time * 1000, 2),
+                "timing_breakdown": timing_breakdown
+            }
         }
+        
+        return response_data
         
     except Exception as e:
         logger.error("Demo translate error", error=str(e))

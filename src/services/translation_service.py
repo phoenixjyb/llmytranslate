@@ -23,6 +23,55 @@ class MockLogger:
 logger = MockLogger()
 
 
+class PerformanceTimer:
+    """Helper class to track detailed timing metrics."""
+    
+    def __init__(self, request_id: str):
+        self.request_id = request_id
+        self.timings = {}
+        self.start_time = time.time()
+        self.current_step = None
+        
+    def start_step(self, step_name: str):
+        """Start timing a specific step."""
+        current_time = time.time()
+        if self.current_step:
+            # End previous step
+            self.timings[self.current_step] = current_time - self.step_start_time
+        
+        self.current_step = step_name
+        self.step_start_time = current_time
+        
+    def end_step(self):
+        """End the current step."""
+        if self.current_step:
+            self.timings[self.current_step] = time.time() - self.step_start_time
+            self.current_step = None
+    
+    def get_total_time(self) -> float:
+        """Get total elapsed time."""
+        return time.time() - self.start_time
+    
+    def get_breakdown(self) -> Dict[str, float]:
+        """Get detailed timing breakdown."""
+        # End current step if any
+        self.end_step()
+        
+        total_time = self.get_total_time()
+        breakdown = {
+            "total_time_ms": round(total_time * 1000, 2),
+            "steps": {}
+        }
+        
+        for step, duration in self.timings.items():
+            breakdown["steps"][step] = {
+                "duration_ms": round(duration * 1000, 2),
+                "percentage": round((duration / total_time) * 100, 1) if total_time > 0 else 0
+            }
+        
+        return breakdown
+
+
 class TranslationService:
     """Core translation service that coordinates all translation operations."""
     
@@ -41,48 +90,62 @@ class TranslationService:
         if not request_id:
             request_id = str(uuid.uuid4())
         
-        start_time = time.time()
+        # Initialize performance timer
+        timer = PerformanceTimer(request_id)
+        timer.start_step("request_validation")
         
         try:
             # Validate request
             self._validate_request(request)
             
             # Check cache first if enabled
+            timer.start_step("cache_lookup")
             cached_result = None
             if self.settings.translation.enable_caching:
                 cached_result = await self._get_cached_translation(request)
                 if cached_result:
+                    timer.start_step("cache_hit_response")
                     logger.info(
                         "Cache hit for translation request",
                         request_id=request_id,
                         app_id=request.appid
                     )
                     
-                    # Log cache hit metrics
+                    # Log cache hit metrics with timing
+                    timing_breakdown = timer.get_breakdown()
                     await self._log_request_metrics(
                         request_id=request_id,
                         request=request,
                         result=cached_result,
-                        response_time=time.time() - start_time,
+                        response_time=timer.get_total_time(),
                         cache_hit=True,
-                        success=True
+                        success=True,
+                        timing_breakdown=timing_breakdown
                     )
                     
-                    return self._format_response(request, cached_result["translation"])
+                    response = self._format_response(request, cached_result["translation"])
+                    # Add timing information to response
+                    if hasattr(response, '__dict__'):
+                        response.__dict__['timing_breakdown'] = timing_breakdown
+                    return response
             
             # Perform translation using semaphore for concurrency control
+            timer.start_step("llm_inference")
             async with self.semaphore:
-                translation_result = await self._perform_translation(request)
+                translation_result = await self._perform_translation(request, timer)
             
             if not translation_result["success"]:
+                timer.start_step("error_response")
                 # Log failed request
+                timing_breakdown = timer.get_breakdown()
                 await self._log_request_metrics(
                     request_id=request_id,
                     request=request,
                     result=translation_result,
-                    response_time=time.time() - start_time,
+                    response_time=timer.get_total_time(),
                     cache_hit=False,
-                    success=False
+                    success=False,
+                    timing_breakdown=timing_breakdown
                 )
                 
                 # Return error response
@@ -95,15 +158,18 @@ class TranslationService:
                 )
             
             # Cache the result if caching is enabled
+            timer.start_step("cache_write")
             if self.settings.translation.enable_caching:
                 await self._cache_translation(request, translation_result)
             
             # Log successful request metrics
+            timer.start_step("response_formatting")
+            timing_breakdown = timer.get_breakdown()
             await self._log_request_metrics(
                 request_id=request_id,
                 request=request,
                 result=translation_result,
-                response_time=time.time() - start_time,
+                response_time=timer.get_total_time(),
                 cache_hit=False,
                 success=True
             )
@@ -111,13 +177,18 @@ class TranslationService:
             logger.info(
                 "Translation completed successfully",
                 request_id=request_id,
-                app_id=request.appid,
+                app_id=request.appid or "unknown",
                 source_lang=request.from_lang,
                 target_lang=request.to,
-                response_time=time.time() - start_time
+                response_time=timer.get_total_time(),
+                timing_breakdown=timing_breakdown
             )
             
-            return self._format_response(request, translation_result["translation"])
+            response = self._format_response(request, translation_result["translation"])
+            # Add timing information to response
+            if hasattr(response, '__dict__'):
+                response.__dict__['timing_breakdown'] = timing_breakdown
+            return response
             
         except Exception as e:
             logger.error(
@@ -128,18 +199,19 @@ class TranslationService:
             )
             
             # Log failed request
+            timing_breakdown = timer.get_breakdown()
             await self._log_request_metrics(
                 request_id=request_id,
                 request=request,
                 result={"error": str(e)},
-                response_time=time.time() - start_time,
+                response_time=timer.get_total_time(),
                 cache_hit=False,
                 success=False
             )
             
             return TranslationResponse(
-                from_lang=getattr(request, 'from_lang', 'unknown'),
-                to_lang=getattr(request, 'to', 'unknown'),
+                **{"from": request.from_lang},
+                to=request.to,
                 trans_result=[],
                 error_code="INTERNAL_ERROR",
                 error_msg=str(e)
@@ -200,16 +272,31 @@ class TranslationService:
         except Exception as e:
             logger.warning("Cache storage failed", error=str(e))
     
-    async def _perform_translation(self, request: TranslationRequest) -> Dict[str, Any]:
-        """Perform the actual translation using Ollama."""
+    async def _perform_translation(self, request: TranslationRequest, timer: Optional[PerformanceTimer] = None) -> Dict[str, Any]:
+        """Perform the actual translation using Ollama with detailed timing."""
         try:
+            if timer:
+                timer.start_step("ollama_connection")
+            
             async with ollama_client:
-                return await ollama_client.generate_translation(
+                if timer:
+                    timer.start_step("llm_inference_actual")
+                
+                result = await ollama_client.generate_translation(
                     text=request.q,
                     source_lang=request.from_lang,
                     target_lang=request.to
                 )
+                
+                if timer:
+                    timer.start_step("llm_response_processing")
+                
+                return result
+                
         except Exception as e:
+            if timer:
+                timer.start_step("fallback_translation")
+            
             logger.warning(f"Ollama translation failed: {e}, using mock response for demo")
             
             # Return a mock translation for demo purposes

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core.config import get_settings
 from .core.network import NetworkManager
-from .api.routes import translation, health, admin, discovery
+from .api.routes import translation, health, admin, discovery, optimized
 
 # Mock logger
 class MockLogger:
@@ -96,6 +96,7 @@ def create_app() -> FastAPI:
     
     # Include routers
     app.include_router(translation.router, prefix="/api")
+    app.include_router(optimized.router, prefix="/api")  # Add optimized routes
     app.include_router(health.router, prefix="/api")
     app.include_router(admin.router, prefix="/api/admin")
     app.include_router(discovery.router)  # Discovery routes already have /api/discovery prefix
@@ -121,7 +122,10 @@ def create_app() -> FastAPI:
             "endpoints": {
                 "health": "/api/health",
                 "translate": "/api/trans/vip/translate",
-                "demo_translate": "/api/demo/translate"
+                "demo_translate": "/api/demo/translate",
+                "optimized_translate": "/api/optimized/translate",
+                "performance_stats": "/api/optimized/stats",
+                "benchmark": "/api/optimized/benchmark"
             }
         }
     

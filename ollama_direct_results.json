@@ -1,0 +1,138 @@
+[
+  {
+    "test_name": "Simple English → Chinese",
+    "success": true,
+    "translation": "你好，世界",
+    "timing_breakdown": {
+      "total_ms": 15102.31,
+      "steps": {
+        "connection": {
+          "duration_ms": 2083.03,
+          "percentage": 13.8
+        },
+        "llm_inference": {
+          "duration_ms": 13018.55,
+          "percentage": 86.2
+        },
+        "response_processing": {
+          "duration_ms": 0.05,
+          "percentage": 0.0
+        }
+      },
+      "ollama_metrics": {
+        "eval_count": 5,
+        "eval_duration_ns": 346769000,
+        "eval_duration_ms": 346.77,
+        "prompt_eval_count": 28,
+        "prompt_eval_duration_ns": 379196800,
+        "prompt_eval_duration_ms": 379.2,
+        "tokens_per_second": 14.42
+      }
+    },
+    "original_text": "Hello world",
+    "direction": "en → zh",
+    "model": "gemma3:latest"
+  },
+  {
+    "test_name": "Simple Chinese → English",
+    "success": true,
+    "translation": "Hello world",
+    "timing_breakdown": {
+      "total_ms": 4588.5,
+      "steps": {
+        "connection": {
+          "duration_ms": 2053.88,
+          "percentage": 44.8
+        },
+        "llm_inference": {
+          "duration_ms": 2533.5,
+          "percentage": 55.2
+        },
+        "response_processing": {
+          "duration_ms": 0.04,
+          "percentage": 0.0
+        }
+      },
+      "ollama_metrics": {
+        "eval_count": 3,
+        "eval_duration_ns": 162418800,
+        "eval_duration_ms": 162.42,
+        "prompt_eval_count": 28,
+        "prompt_eval_duration_ns": 143201700,
+        "prompt_eval_duration_ms": 143.2,
+        "tokens_per_second": 18.47
+      }
+    },
+    "original_text": "你好世界",
+    "direction": "zh → en",
+    "model": "gemma3:latest"
+  },
+  {
+    "test_name": "Medium English → Chinese",
+    "success": true,
+    "translation": "早上好！你今天好吗？希望你有个美好的一天。",
+    "timing_breakdown": {
+      "total_ms": 5581.2,
+      "steps": {
+        "connection": {
+          "duration_ms": 2039.41,
+          "percentage": 36.5
+        },
+        "llm_inference": {
+          "duration_ms": 3540.94,
+          "percentage": 63.4
+        },
+        "response_processing": {
+          "duration_ms": 0.05,
+          "percentage": 0.0
+        }
+      },
+      "ollama_metrics": {
+        "eval_count": 17,
+        "eval_duration_ns": 1190458600,
+        "eval_duration_ms": 1190.46,
+        "prompt_eval_count": 42,
+        "prompt_eval_duration_ns": 157855900,
+        "prompt_eval_duration_ms": 157.86,
+        "tokens_per_second": 14.28
+      }
+    },
+    "original_text": "Good morning! How are you today? I hope you have a wonderful day.",
+    "direction": "en → zh",
+    "model": "gemma3:latest"
+  },
+  {
+    "test_name": "Technical English → Chinese",
+    "success": true,
+    "translation": "机器学习算法使用神经网络处理自然语言。",
+    "timing_breakdown": {
+      "total_ms": 4947.64,
+      "steps": {
+        "connection": {
+          "duration_ms": 2076.68,
+          "percentage": 42.0
+        },
+        "llm_inference": {
+          "duration_ms": 2870.24,
+          "percentage": 58.0
+        },
+        "response_processing": {
+          "duration_ms": 0.03,
+          "percentage": 0.0
+        }
+      },
+      "ollama_metrics": {
+        "eval_count": 9,
+        "eval_duration_ns": 595067600,
+        "eval_duration_ms": 595.07,
+        "prompt_eval_count": 37,
+        "prompt_eval_duration_ns": 111123800,
+        "prompt_eval_duration_ms": 111.12,
+        "tokens_per_second": 15.12
+      }
+    },
+    "original_text": "Machine learning algorithms use neural networks to process natural language.",
+    "direction": "en → zh",
+    "model": "gemma3:latest"
+  }
+]
