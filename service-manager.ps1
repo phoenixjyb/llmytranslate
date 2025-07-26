@@ -11,6 +11,9 @@ param(
     [Parameter(ParameterSetName='StartWeb')]
     [switch]$StartWeb,
     
+    [Parameter(ParameterSetName='TestNgrok')]
+    [switch]$TestNgrok,
+    
     [Parameter(ParameterSetName='Stop')]
     [switch]$Stop,
     
@@ -41,6 +44,7 @@ function Show-Help {
     Write-Host "  .\service-manager.ps1 -SetToken 'your_ngrok_token'"
     Write-Host "  .\service-manager.ps1 -Start        # Start local service only"
     Write-Host "  .\service-manager.ps1 -StartWeb     # Start service + ngrok tunnel"
+    Write-Host "  .\service-manager.ps1 -TestNgrok    # Test ngrok with proven method"
     Write-Host "  .\service-manager.ps1 -Stop         # Stop all services"
     Write-Host "  .\service-manager.ps1 -Status       # Check service status"
     Write-Host "  .\service-manager.ps1 -GetUrl       # Get ngrok public URL"
@@ -120,8 +124,14 @@ function Start-LocalService {
         return $true
     }
     
-    # Start the service
-    Start-Process PowerShell -ArgumentList "-NoExit", "-Command", "& '.\start-service.ps1'" -WindowStyle Normal
+    # Use the proven working start script from eadb89c commit
+    if (Test-Path ".\start-service.ps1") {
+        Write-Host "🔧 Using proven start script..." -ForegroundColor Gray
+        Start-Process PowerShell -ArgumentList "-NoExit", "-Command", "& '.\start-service.ps1'" -WindowStyle Normal
+    } else {
+        Write-Host "❌ start-service.ps1 not found!" -ForegroundColor Red
+        return $false
+    }
     
     # Wait for service to start
     $timeout = 30
@@ -166,12 +176,14 @@ function Start-NgrokTunnel {
     # Configure ngrok (in case it wasn't done before)
     ngrok config add-authtoken $token 2>$null
     
-    # Start tunnel in background
     Write-Host "🌐 Starting public tunnel to http://localhost:8000..." -ForegroundColor Cyan
-    Write-Host "📋 Ngrok will open in a new window" -ForegroundColor Gray
-    Write-Host "🔗 Your public URL will be displayed in the ngrok window" -ForegroundColor Gray
+    Write-Host "📋 Ngrok tunnel will show URL when ready" -ForegroundColor Gray
+    Write-Host "🔗 Use Ctrl+C in the ngrok window to stop the tunnel" -ForegroundColor Gray
+    Write-Host ""
     
-    Start-Process "ngrok" -ArgumentList "http", "8000" -WindowStyle Normal
+    # Use the proven working method from eadb89c - direct ngrok execution
+    # This will run in foreground and show the URL immediately
+    Start-Process PowerShell -ArgumentList "-NoExit", "-Command", "Write-Host '🚇 Ngrok Tunnel for LLM Translation Service' -ForegroundColor Green; Write-Host 'Service: http://localhost:8000' -ForegroundColor Cyan; Write-Host ''; ngrok http 8000" -WindowStyle Normal
     
     Start-Sleep -Seconds 3
     Write-Host "✅ Ngrok tunnel started!" -ForegroundColor Green
@@ -183,21 +195,30 @@ function Start-NgrokTunnel {
 function Stop-Services {
     Write-Host "🛑 Stopping services..." -ForegroundColor Yellow
     
-    # Stop ngrok processes
-    $ngrokProcesses = Get-Process -Name "ngrok" -ErrorAction SilentlyContinue
-    if ($ngrokProcesses) {
-        $ngrokProcesses | Stop-Process -Force
-        Write-Host "✅ Stopped ngrok tunnels" -ForegroundColor Green
-    }
-    
-    # Find and stop service processes
-    $connections = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
-    if ($connections) {
-        foreach ($conn in $connections) {
-            $process = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
-            if ($process) {
-                Stop-Process -Id $process.Id -Force
-                Write-Host "✅ Stopped service process: $($process.ProcessName)" -ForegroundColor Green
+    # Use the proven working stop script from eadb89c commit
+    if (Test-Path ".\scripts\stop-service.ps1") {
+        Write-Host "🔧 Using proven stop script..." -ForegroundColor Gray
+        & ".\scripts\stop-service.ps1" -Force
+    } else {
+        # Fallback to manual stop
+        Write-Host "🔧 Using manual stop procedure..." -ForegroundColor Gray
+        
+        # Stop ngrok processes
+        $ngrokProcesses = Get-Process -Name "ngrok" -ErrorAction SilentlyContinue
+        if ($ngrokProcesses) {
+            $ngrokProcesses | Stop-Process -Force
+            Write-Host "✅ Stopped ngrok tunnels" -ForegroundColor Green
+        }
+        
+        # Find and stop service processes
+        $connections = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
+        if ($connections) {
+            foreach ($conn in $connections) {
+                $process = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
+                if ($process -and $process.ProcessName -ne "Idle") {
+                    Stop-Process -Id $process.Id -Force
+                    Write-Host "✅ Stopped service process: $($process.ProcessName)" -ForegroundColor Green
+                }
             }
         }
     }
@@ -280,6 +301,30 @@ switch ($PSCmdlet.ParameterSetName) {
             Write-Host "📱 Local: http://localhost:8000" -ForegroundColor Cyan
             Write-Host "🌐 Public: Check ngrok window for URL" -ForegroundColor Cyan
             Write-Host "🛑 To stop: .\service-manager.ps1 -Stop" -ForegroundColor Yellow
+        }
+    }
+    'TestNgrok' {
+        Write-Host "🧪 Testing Ngrok with Proven Method (eadb89c)" -ForegroundColor Green
+        Write-Host "=============================================" -ForegroundColor Cyan
+        
+        $token = Get-SavedToken
+        if (!$token) {
+            Write-Host "❌ No saved ngrok token found!" -ForegroundColor Red
+            Write-Host "💡 Please run: .\service-manager.ps1 -SetToken 'your_token'" -ForegroundColor Yellow
+        } else {
+            Write-Host "🚇 Using the exact working method from eadb89c commit..." -ForegroundColor Yellow
+            Write-Host "📋 This method was proven to work with remote access" -ForegroundColor Gray
+            Write-Host ""
+            
+            # Configure ngrok with token
+            ngrok config add-authtoken $token
+            
+            # Run in a separate window so it doesn't hang this script
+            Write-Host "🌐 Starting ngrok tunnel in new window..." -ForegroundColor Cyan
+            Start-Process PowerShell -ArgumentList "-NoExit", "-Command", "Write-Host '🧪 Ngrok Test (eadb89c method)' -ForegroundColor Green; Write-Host 'Press Ctrl+C to stop' -ForegroundColor Yellow; Write-Host ''; ngrok http 8000" -WindowStyle Normal
+            
+            Write-Host "✅ Ngrok test started in new window!" -ForegroundColor Green
+            Write-Host "💡 Look for the ngrok window to see your public URL" -ForegroundColor Yellow
         }
     }
     'Stop' {
