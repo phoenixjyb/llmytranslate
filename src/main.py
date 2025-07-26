@@ -6,7 +6,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import time
+import os
+from pathlib import Path
 
 from .core.config import get_settings
 from .core.network import NetworkManager
@@ -97,6 +100,11 @@ def create_app() -> FastAPI:
     app.include_router(admin.router, prefix="/api/admin")
     app.include_router(discovery.router)  # Discovery routes already have /api/discovery prefix
     
+    # Mount static files for web interface
+    web_dir = Path(__file__).parent.parent / "web"
+    if web_dir.exists():
+        app.mount("/web", StaticFiles(directory=str(web_dir), html=True), name="web")
+    
     # Root endpoint
     @app.get("/")
     async def root():
@@ -108,6 +116,7 @@ def create_app() -> FastAPI:
             "deployment_mode": settings.deployment.mode,
             "connection_url": network_manager.get_connection_url(),
             "docs_url": "/docs" if settings.debug else None,
+            "web_interface": "/web/",
             "service_discovery": "/api/discovery/info",
             "endpoints": {
                 "health": "/api/health",

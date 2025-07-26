@@ -495,10 +495,38 @@ The service works with any Ollama-compatible model. Recommended models for trans
 | Model | Size | Speed | Quality | Best For |
 |-------|------|-------|---------|----------|
 | `llama3.1:8b` | 4.7GB | ⭐⭐⭐ | ⭐⭐⭐ | General use (default) |
+| `gemma3:latest` | 3.3GB | ⭐⭐⭐⭐ | ⭐⭐⭐ | Fast, GPU-optimized |
+| `llava:latest` | 4.7GB | ⭐⭐⭐ | ⭐⭐⭐⭐ | Vision + text translation |
 | `llama3.1:70b` | 40GB | ⭐ | ⭐⭐⭐⭐⭐ | High quality translations |
 | `qwen2.5:7b` | 4.4GB | ⭐⭐⭐ | ⭐⭐⭐⭐ | Chinese-specific translations |
 | `mixtral:8x7b` | 26GB | ⭐⭐ | ⭐⭐⭐⭐ | Complex technical content |
 | `phi3:medium` | 7.9GB | ⭐⭐ | ⭐⭐⭐ | Balanced performance |
+
+### GPU Acceleration 🚀
+
+**Automatic GPU Detection**: Ollama automatically uses available GPUs for significantly faster inference.
+
+**GPU Requirements for optimal performance**:
+- **VRAM**: 4GB+ recommended (8GB+ for larger models)
+- **CUDA**: Version 11.8+ or 12.x
+- **Supported GPUs**: NVIDIA GTX 1060+, RTX series, Quadro P2000+, Tesla, A100
+
+**Check GPU Usage**:
+```bash
+# Verify GPU acceleration is working
+nvidia-smi
+ollama ps  # Shows loaded models and GPU usage
+
+# Test with your available models
+ollama run gemma3:latest "Translate to Chinese: Hello world"
+ollama run llama3.1:8b "Translate to English: 你好世界"
+```
+
+**Performance Benefits**:
+- **5-10x faster** inference vs CPU-only
+- **Better concurrent request handling**
+- **Lower system CPU usage**
+- **Consistent response times** under load
 
 ```bash
 # Pull and use a different model
