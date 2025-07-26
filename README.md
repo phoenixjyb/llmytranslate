@@ -6,6 +6,7 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
 
 ## 🚀 Features
 
+- 🌐 **Web Interface**: Modern, responsive web UI for easy translation with auto-detection and real-time results
 - 🚀 **Local LLM Translation**: Uses Ollama for local LLM management and translation
 - 🔄 **Bidirectional Translation**: Chinese ↔ English translation support with auto-detection
 - 🔗 **API Compatibility**: Drop-in replacement for Baidu Translate API with signature validation
@@ -265,6 +266,51 @@ AUTH__DISABLE_SIGNATURE_VALIDATION=false
 ENVIRONMENT=production
 DEBUG=false
 ```
+
+## 🌐 Web Interface
+
+A modern, responsive web interface is available for easy translation with auto-detection and real-time results.
+
+### Local Access
+```
+http://localhost:8000/web/
+```
+
+### Remote Access
+The web interface automatically detects your access method:
+
+**Via VS Code Port Forwarding (SSH):**
+1. In VS Code, open the "Ports" tab
+2. Forward port `8000`
+3. Click the forwarded URL to access the web interface
+
+**Via ngrok tunnel:**
+```bash
+# Start the service
+.\start-service.ps1
+
+# Start ngrok (in another terminal)
+ngrok http 8000
+
+# Access via the ngrok URL (e.g., https://abc123.ngrok-free.app/web/)
+```
+
+### Web Interface Features
+- 🌍 **Auto-detection**: Automatically detects source language
+- 🔄 **Language swap**: Easy source/target language switching  
+- 📊 **Real-time metrics**: Shows translation time and character count
+- 📋 **Copy to clipboard**: One-click copy of translation results
+- 🔗 **Auto-configuration**: Automatically detects server URL when accessed remotely
+- 🏥 **Health monitoring**: Real-time server status indicator
+- ⚙️ **Settings panel**: Configurable server URL and API key
+- 📱 **Responsive design**: Works on desktop, tablet, and mobile
+
+### Usage
+1. Enter text in the source textarea
+2. Select source and target languages (or use auto-detect)
+3. Click "Translate" 
+4. Copy results with the copy button
+5. Use "Check Server" to verify connectivity
 
 ## 🔧 API Usage
 
@@ -1398,6 +1444,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - [Data Flow Diagram](docs/architecture/DATA_FLOW_DIAGRAM.md) - Data processing flow
 
 - **Guides & Tutorials**:
+  - [Web Interface Guide](docs/guides/WEB_INTERFACE_GUIDE.md) - Complete web UI documentation
   - [Router Setup Guide](docs/guides/ROUTER_SETUP_GUIDE.md) - Network configuration
   - [Remote Access Guide](docs/guides/REMOTE_ACCESS_GUIDE.md) - Remote deployment setup
   - [Testing Procedure](docs/guides/TESTING_PROCEDURE.md) - Comprehensive testing guide
@@ -1420,6 +1467,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🎯 Project Status
 
 - ✅ **Core Translation**: Fully functional with Ollama integration
+- ✅ **Web Interface**: Modern, responsive UI with auto-detection and remote access support
 - ✅ **API Compatibility**: Complete Baidu Translate API compatibility
 - ✅ **Caching System**: Redis-based caching with fallback
 - ✅ **Authentication**: API key validation and rate limiting

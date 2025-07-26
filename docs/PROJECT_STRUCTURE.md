@@ -92,10 +92,12 @@ llmYTranslate/
 │       ├── ollama_client.py      # Local LLM integration
 │       ├── stats_service.py      # Statistics and monitoring
 │       └── translation_service.py # Core translation logic
-└── tests/                        # Test suite
-    ├── examples/                 # Example tests
-    ├── integration/              # Integration tests
-    └── unit/                     # Unit tests
+├── tests/                        # Test suite
+│   ├── examples/                 # Example tests
+│   ├── integration/              # Integration tests
+│   └── unit/                     # Unit tests
+└── web/                          # Web interface
+    └── index.html                # Modern translation web UI
 ```
 
 ## Key Files Description
@@ -118,10 +120,12 @@ llmYTranslate/
 ### API Endpoints
 - **`/translate`**: Main translation endpoint (Baidu API compatible)
 - **`/api/v2/trans`**: Alternative translation endpoint
+- **`/api/demo/translate`**: Demo translation endpoint (no auth required)
 - **`/health`**: Service health checks
 - **`/admin/stats`**: Statistics and monitoring
 - **`/admin/cache/clear`**: Cache management
 - **`/discovery`**: Service discovery endpoints
+- **`/web/`**: Web interface for interactive translation
 
 ### Models
 - **`src/models/schemas.py`**: Pydantic data models and validation schemas

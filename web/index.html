@@ -336,7 +336,10 @@
             <div class="settings-content" id="settings-content">
                 <div class="form-group">
                     <label for="serverUrl">Server URL:</label>
-                    <input type="text" id="serverUrl" value="http://localhost:8000" placeholder="http://your-server:8000">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="serverUrl" value="http://localhost:8000" placeholder="http://your-server:8000" style="flex: 1;">
+                        <button type="button" onclick="detectNgrokUrl()" style="padding: 12px 15px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">🔍 Auto-detect</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="apiKey">API Key (optional):</label>
@@ -381,13 +384,13 @@
         </div>
 
         <div class="button-group">
-            <button class="btn btn-primary" onclick="translateText()" id="translateBtn">
+            <button class="btn btn-primary" id="translateBtn">
                 🔄 Translate
             </button>
-            <button class="btn btn-secondary" onclick="clearAll()">
+            <button class="btn btn-secondary" id="clearBtn">
                 🗑️ Clear
             </button>
-            <button class="btn btn-secondary" onclick="checkHealth()">
+            <button class="btn btn-secondary" id="healthBtn">
                 🏥 Check Server
             </button>
         </div>
@@ -412,14 +415,103 @@
         let isTranslating = false;
         let serverHealth = false;
 
+        // Add global error handler
+        window.addEventListener('error', function(e) {
+            console.error('JavaScript Error:', e.error);
+            console.error('Error message:', e.message);
+            console.error('Error filename:', e.filename);
+            console.error('Error line:', e.lineno);
+        });
+
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing...');
+            autoDetectServerUrl();
             setupEventListeners();
             checkHealth();
             updateCharCount();
         });
 
+        function autoDetectServerUrl() {
+            const serverUrlInput = document.getElementById('serverUrl');
+            
+            console.log('Current location:', window.location.href);
+            console.log('Hostname:', window.location.hostname);
+            console.log('Host:', window.location.host);
+            
+            // If we're accessing via ngrok or a remote URL, use the same base URL
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                const baseUrl = window.location.protocol + '//' + window.location.host;
+                serverUrlInput.value = baseUrl;
+                console.log('Auto-detected server URL:', baseUrl);
+                
+                // Update the UI to show the detected URL
+                const statusIndicator = document.getElementById('status-indicator');
+                statusIndicator.textContent = `🌐 Auto-detected: ${baseUrl}`;
+            } else {
+                console.log('Using localhost, keeping default');
+            }
+            // Otherwise keep the default localhost:8000
+        }
+
+        async function detectNgrokUrl() {
+            const serverUrlInput = document.getElementById('serverUrl');
+            const autoDetectBtn = document.querySelector('button[onclick="detectNgrokUrl()"]');
+            
+            autoDetectBtn.textContent = '🔄 Detecting...';
+            autoDetectBtn.disabled = true;
+            
+            try {
+                // First try to detect from current location
+                if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    const baseUrl = window.location.protocol + '//' + window.location.host;
+                    serverUrlInput.value = baseUrl;
+                    console.log('Detected from current location:', baseUrl);
+                    return;
+                }
+                
+                // If on localhost, try to fetch from ngrok API
+                const ngrokResponse = await fetch('http://localhost:4040/api/tunnels');
+                if (ngrokResponse.ok) {
+                    const ngrokData = await ngrokResponse.json();
+                    const httpTunnel = ngrokData.tunnels.find(tunnel => 
+                        tunnel.config.addr === 'http://localhost:8000' && 
+                        tunnel.proto === 'https'
+                    );
+                    
+                    if (httpTunnel) {
+                        serverUrlInput.value = httpTunnel.public_url;
+                        console.log('Detected from ngrok API:', httpTunnel.public_url);
+                        
+                        // Show success feedback
+                        autoDetectBtn.textContent = '✅ Found!';
+                        setTimeout(() => {
+                            autoDetectBtn.textContent = '🔍 Auto-detect';
+                        }, 2000);
+                        
+                        // Auto-check health with new URL
+                        setTimeout(checkHealth, 500);
+                        return;
+                    }
+                }
+                
+                throw new Error('No ngrok tunnel found');
+                
+            } catch (error) {
+                console.error('Auto-detection failed:', error);
+                alert('Could not auto-detect ngrok URL. Please enter manually or make sure ngrok is running.');
+                autoDetectBtn.textContent = '❌ Failed';
+                setTimeout(() => {
+                    autoDetectBtn.textContent = '🔍 Auto-detect';
+                }, 2000);
+            } finally {
+                autoDetectBtn.disabled = false;
+            }
+        }
+
         function setupEventListeners() {
+            console.log('Setting up event listeners...');
+            
             const sourceText = document.getElementById('sourceText');
             sourceText.addEventListener('input', updateCharCount);
             
@@ -430,6 +522,48 @@
                     translateText();
                 }
             });
+            
+            // Add button event listeners
+            const translateBtn = document.getElementById('translateBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            const healthBtn = document.getElementById('healthBtn');
+            
+            console.log('Translate button:', translateBtn);
+            console.log('Clear button:', clearBtn);
+            console.log('Health button:', healthBtn);
+            
+            if (translateBtn) {
+                translateBtn.addEventListener('click', function(e) {
+                    console.log('Translate button clicked!');
+                    e.preventDefault();
+                    translateText();
+                });
+                console.log('Translate button event listener added');
+            } else {
+                console.error('Translate button not found!');
+            }
+            
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function(e) {
+                    console.log('Clear button clicked!');
+                    e.preventDefault();
+                    clearAll();
+                });
+                console.log('Clear button event listener added');
+            } else {
+                console.error('Clear button not found!');
+            }
+            
+            if (healthBtn) {
+                healthBtn.addEventListener('click', function(e) {
+                    console.log('Health button clicked!');
+                    e.preventDefault();
+                    checkHealth();
+                });
+                console.log('Health button event listener added');
+            } else {
+                console.error('Health button not found!');
+            }
         }
 
         function updateCharCount() {
@@ -464,6 +598,8 @@
             const serverUrl = document.getElementById('serverUrl').value.trim();
             const statusIndicator = document.getElementById('status-indicator');
             
+            console.log('Checking health for URL:', serverUrl);
+            
             if (!serverUrl) {
                 updateStatus(false, 'No server URL provided');
                 return;
@@ -480,13 +616,17 @@
                     }
                 });
                 
+                console.log('Health check response:', response.status, response.ok);
+                
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('Health data:', data);
                     updateStatus(true, `Server healthy • ${data.model_info?.name || 'Unknown model'}`);
                 } else {
                     updateStatus(false, `Server error: ${response.status}`);
                 }
             } catch (error) {
+                console.error('Health check error:', error);
                 updateStatus(false, `Connection failed: ${error.message}`);
             }
         }
@@ -505,14 +645,51 @@
         }
 
         async function translateText() {
-            if (isTranslating) return;
+            // Simple test first
+            console.log('translateText function called!');
+            
+            if (isTranslating) {
+                console.log('Already translating, returning');
+                return;
+            }
 
+            console.log('Starting translation process...');
+            
             const sourceText = document.getElementById('sourceText').value.trim();
             const sourceLang = document.getElementById('sourceLang').value;
             const targetLang = document.getElementById('targetLang').value;
             const serverUrl = document.getElementById('serverUrl').value.trim();
             const resultDiv = document.getElementById('result');
             const translateBtn = document.getElementById('translateBtn');
+
+            // Add visible debugging
+            console.log('=== TRANSLATION DEBUG START ===');
+            console.log('Source text:', sourceText);
+            console.log('Source lang:', sourceLang);
+            console.log('Target lang:', targetLang);
+            console.log('Server URL:', serverUrl);
+            
+            // Test connectivity first
+            console.log('Testing connectivity to server...');
+            try {
+                const healthResponse = await fetch(`${serverUrl}/api/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        ...(serverUrl.includes('ngrok') && {'ngrok-skip-browser-warning': 'true'})
+                    }
+                });
+                console.log('Health check response:', healthResponse.status, healthResponse.ok);
+                
+                if (!healthResponse.ok) {
+                    throw new Error(`Health check failed: ${healthResponse.status}`);
+                }
+            } catch (healthError) {
+                console.error('Health check failed:', healthError);
+                showResult('error', `❌ Cannot connect to server: ${healthError.message}`);
+                return;
+            }
+            console.log('Connectivity test passed, proceeding with translation...');
 
             // Validation
             if (!sourceText) {
@@ -547,28 +724,68 @@
                 formData.append('from', sourceLang);
                 formData.append('to', targetLang);
 
-                const response = await fetch(`${serverUrl}/api/demo/translate`, {
+                console.log('Making request to:', `${serverUrl}/api/demo/translate`);
+                console.log('Request data:', {q: sourceText, from: sourceLang, to: targetLang});
+                console.log('Current location origin:', window.location.origin);
+                console.log('Target server URL:', serverUrl);
+
+                // Add headers for better compatibility with ngrok
+                const requestOptions = {
                     method: 'POST',
-                    body: formData
-                });
+                    body: formData,
+                    headers: {
+                        'Accept': 'application/json',
+                        // Add ngrok-skip-browser-warning header if accessing via ngrok
+                        ...(serverUrl.includes('ngrok') && {'ngrok-skip-browser-warning': 'true'})
+                    }
+                };
+
+                console.log('Request options:', requestOptions);
+                
+                const response = await fetch(`${serverUrl}/api/demo/translate`, requestOptions);
+
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
 
                 const responseTime = Date.now() - startTime;
 
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('Full response data:', data);
                     
-                    if (data.trans_result && data.trans_result.length > 0) {
-                        const result = data.trans_result[0];
-                        showTranslationResult(result.src, result.dst, data.from, data.to, responseTime);
+                    // Handle demo endpoint response structure
+                    const responseData = data.response || data;
+                    console.log('Extracted responseData:', responseData);
+                    
+                    if (responseData.trans_result && responseData.trans_result.length > 0) {
+                        const result = responseData.trans_result[0];
+                        console.log('Translation result:', result);
+                        showTranslationResult(result.src, result.dst, responseData.from_lang || responseData.from, responseData.to, responseTime);
                     } else {
+                        console.error('No trans_result found in responseData:', responseData);
                         showResult('error', '❌ No translation result received');
                     }
                 } else {
                     const errorData = await response.json().catch(() => ({}));
-                    showResult('error', `❌ Translation failed: ${errorData.error_msg || response.statusText}`);
+                    const errorResponse = errorData.response || errorData;
+                    console.error('Response not ok:', response.status, errorResponse);
+                    showResult('error', `❌ Translation failed: ${errorResponse.error_msg || errorData.error || response.statusText}`);
                 }
             } catch (error) {
-                showResult('error', `❌ Network error: ${error.message}`);
+                console.error('Network/Request error:', error);
+                console.error('Error type:', error.constructor.name);
+                console.error('Error message:', error.message);
+                console.error('Error stack:', error.stack);
+                
+                let errorMessage = `❌ Network error: ${error.message}`;
+                
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    errorMessage = '❌ Network error: Unable to connect to server. Check if the server URL is correct and accessible.';
+                } else if (error.name === 'TypeError' && error.message.includes('CORS')) {
+                    errorMessage = '❌ CORS error: The server is not allowing requests from this origin.';
+                }
+                
+                showResult('error', errorMessage);
             } finally {
                 isTranslating = false;
                 translateBtn.disabled = false;
