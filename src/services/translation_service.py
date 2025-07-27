@@ -132,7 +132,13 @@ class TranslationService:
             # Perform translation using semaphore for concurrency control
             timer.start_step("llm_inference")
             async with self.semaphore:
-                translation_result = await self._perform_translation(request, timer)
+                translation_result = await ollama_client.generate_translation(
+                text=request.q,
+                source_lang=request.from_lang,
+                target_lang=request.to_lang,
+                model_name=None,  # Will use default
+                translation_mode="succinct"
+            )
             
             if not translation_result["success"]:
                 timer.start_step("error_response")
@@ -151,7 +157,7 @@ class TranslationService:
                 # Return error response
                 return TranslationResponse(
                     **{"from": request.from_lang},
-                    to=request.to,
+                    to=request.to_lang,
                     trans_result=[],
                     error_code="TRANSLATION_FAILED",
                     error_msg=translation_result.get("error", "Translation failed")
@@ -179,7 +185,7 @@ class TranslationService:
                 request_id=request_id,
                 app_id=request.appid or "unknown",
                 source_lang=request.from_lang,
-                target_lang=request.to,
+                target_lang=request.to_lang,
                 response_time=timer.get_total_time(),
                 timing_breakdown=timing_breakdown
             )
@@ -211,7 +217,7 @@ class TranslationService:
             
             return TranslationResponse(
                 **{"from": request.from_lang},
-                to=request.to,
+                to=request.to_lang,
                 trans_result=[],
                 error_code="INTERNAL_ERROR",
                 error_msg=str(e)
@@ -226,10 +232,10 @@ class TranslationService:
         if request.from_lang not in supported_langs:
             raise ValueError(f"Unsupported source language: {request.from_lang}")
         
-        if request.to not in supported_langs:
-            raise ValueError(f"Unsupported target language: {request.to}")
+        if request.to_lang not in supported_langs:
+            raise ValueError(f"Unsupported target language: {request.to_lang}")
         
-        if request.from_lang == request.to and request.from_lang != "auto":
+        if request.from_lang == request.to_lang and request.from_lang != "auto":
             raise ValueError("Source and target languages cannot be the same")
     
     async def _get_cached_translation(self, request: TranslationRequest) -> Optional[Dict[str, Any]]:
@@ -239,7 +245,7 @@ class TranslationService:
                 cache_key = ollama_client.create_cache_key(
                     request.q,
                     request.from_lang,
-                    request.to,
+                    request.to_lang,
                     translation_mode=getattr(request, 'translation_mode', 'succinct')
                 )
                 return await cache_service.get_translation(cache_key)
@@ -258,7 +264,7 @@ class TranslationService:
                 cache_key = ollama_client.create_cache_key(
                     request.q,
                     request.from_lang,
-                    request.to,
+                    request.to_lang,
                     translation_mode=getattr(request, 'translation_mode', 'succinct')
                 )
                 await cache_service.set_translation(
@@ -287,7 +293,7 @@ class TranslationService:
                 result = await ollama_client.generate_translation(
                     text=request.q,
                     source_lang=request.from_lang,
-                    target_lang=request.to,
+                    target_lang=request.to_lang,
                     translation_mode=getattr(request, 'translation_mode', 'succinct')
                 )
                 
@@ -318,8 +324,8 @@ class TranslationService:
                 }
             }
             
-            translation_map = mock_translations.get((request.from_lang, request.to), {})
-            mock_translation = translation_map.get(request.q, f"[DEMO] Translated '{request.q}' from {request.from_lang} to {request.to}")
+            translation_map = mock_translations.get((request.from_lang, request.to_lang), {})
+            mock_translation = translation_map.get(request.q, f"[DEMO] Translated '{request.q}' from {request.from_lang} to {request.to_lang}")
             
             return {
                 "success": True,
@@ -336,7 +342,7 @@ class TranslationService:
         """Format translation response in Baidu API format."""
         return TranslationResponse(
             **{"from": request.from_lang},  # Use alias key
-            to=request.to,  # Correct field name
+            to=request.to_lang,  # Correct field name
             trans_result=[
                 TranslationResult(
                     src=request.q,
@@ -360,7 +366,7 @@ class TranslationService:
                 request_id=request_id,
                 app_id=request.appid,
                 source_language=request.from_lang,
-                target_language=request.to,
+                target_language=request.to_lang,
                 input_text_length=len(request.q),
                 output_text_length=len(result.get("translation", "")),
                 input_tokens=result.get("input_tokens", 0),
