@@ -4,6 +4,7 @@ Optimized Translation API Routes
 
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
+from typing import Dict, Any
 import time
 import logging
 
@@ -20,7 +21,8 @@ async def optimized_translate(
     from_lang: str = Form("en", alias="from", description="Source language"),
     to_lang: str = Form("zh", alias="to", description="Target language"),
     model: str = Form(None, description="Model to use (optional)"),
-    use_cache: bool = Form(True, description="Use caching")
+    use_cache: bool = Form(True, description="Use caching"),
+    translation_mode: str = Form("succinct", description="Translation mode: succinct or verbose")
 ):
     """
     Optimized translation endpoint with:
@@ -40,7 +42,8 @@ async def optimized_translate(
             from_lang=from_lang,
             to_lang=to_lang,
             model=model,
-            use_cache=use_cache
+            use_cache=use_cache,
+            translation_mode=translation_mode
         )
         
         # Perform translation
@@ -64,7 +67,7 @@ async def optimized_translate(
                 }
             }
             
-            return JSONResponse(content=response_data)
+            return response_data
         else:
             raise HTTPException(
                 status_code=500,

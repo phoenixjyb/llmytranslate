@@ -73,11 +73,12 @@ class OllamaClient:
         text: str,
         source_lang: str,
         target_lang: str,
-        model_name: Optional[str] = None
+        model_name: Optional[str] = None,
+        translation_mode: str = "succinct"
     ) -> Dict[str, Any]:
         """Generate translation using Ollama."""
         model = model_name or self.model_name
-        prompt = self._create_translation_prompt(text, source_lang, target_lang)
+        prompt = self._create_translation_prompt(text, source_lang, target_lang, translation_mode)
         
         request_data = OllamaRequest(
             model=model,
@@ -193,7 +194,8 @@ class OllamaClient:
         self,
         text: str,
         source_lang: str,
-        target_lang: str
+        target_lang: str,
+        translation_mode: str = "succinct"
     ) -> str:
         """Create a translation prompt for the LLM."""
         
@@ -201,22 +203,55 @@ class OllamaClient:
         lang_names = {
             "en": "English",
             "zh": "Chinese",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+            "ja": "Japanese",
+            "ko": "Korean",
             "auto": "automatically detected language"
         }
         
         source_name = lang_names.get(source_lang, source_lang)
         target_name = lang_names.get(target_lang, target_lang)
         
-        if source_lang == "auto":
-            prompt = f"""Please translate the following text to {target_name}. Provide only the translation without any additional explanation or commentary.
+        if translation_mode == "verbose":
+            # Verbose mode with explanations and alternatives
+            if source_lang == "auto":
+                prompt = f"""Please translate the following text to {target_name}. Provide multiple translation options with explanations of nuances, grammar breakdowns, and cultural context where relevant.
 
 Text to translate: {text}
+
+Please provide:
+1. The most common/general translation
+2. Alternative translations with different nuances
+3. Brief explanations of grammar or cultural context
+4. Pronunciation guides where helpful
+
+Translation with explanations:"""
+            else:
+                prompt = f"""Please translate the following text from {source_name} to {target_name}. Provide multiple translation options with explanations of nuances, grammar breakdowns, and cultural context where relevant.
+
+Text to translate: {text}
+
+Please provide:
+1. The most common/general translation
+2. Alternative translations with different nuances  
+3. Brief explanations of grammar or cultural context
+4. Pronunciation guides where helpful
+
+Translation with explanations:"""
+        else:
+            # Succinct mode - professional, direct translation only
+            if source_lang == "auto":
+                prompt = f"""Translate the following text to {target_name}. Provide ONLY the most accurate and natural translation. Do not include any explanations, alternatives, grammar breakdowns, or additional commentary.
+
+Text: {text}
 
 Translation:"""
-        else:
-            prompt = f"""Please translate the following text from {source_name} to {target_name}. Provide only the translation without any additional explanation or commentary.
+            else:
+                prompt = f"""Translate from {source_name} to {target_name}. Provide ONLY the most accurate and natural translation. Do not include any explanations, alternatives, grammar breakdowns, or additional commentary.
 
-Text to translate: {text}
+Text: {text}
 
 Translation:"""
         
@@ -251,11 +286,12 @@ Translation:"""
         text: str,
         source_lang: str,
         target_lang: str,
-        model_name: Optional[str] = None
+        model_name: Optional[str] = None,
+        translation_mode: str = "succinct"
     ) -> str:
         """Create a cache key for translation request."""
         model = model_name or self.model_name
-        key_string = f"{text}|{source_lang}|{target_lang}|{model}"
+        key_string = f"{text}|{source_lang}|{target_lang}|{model}|{translation_mode}"
         return hashlib.md5(key_string.encode()).hexdigest()
 
 

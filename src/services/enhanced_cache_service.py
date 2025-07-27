@@ -75,7 +75,7 @@ class EnhancedCacheService:
             self.cache_file.parent.mkdir(exist_ok=True)
             # Don't load from disk immediately - do it on first use
     
-    def _generate_cache_key(self, text: str, from_lang: str, to_lang: str, model: str) -> str:
+    def _generate_cache_key(self, text: str, from_lang: str, to_lang: str, model: str, translation_mode: str = "succinct") -> str:
         """Generate a unique cache key for the translation request."""
         # Normalize text for better cache hits
         normalized_text = text.strip().lower()
@@ -85,7 +85,8 @@ class EnhancedCacheService:
             "text": normalized_text,
             "from": from_lang.lower(),
             "to": to_lang.lower(),
-            "model": model.lower()
+            "model": model.lower(),
+            "mode": translation_mode.lower()
         }
         
         # Generate hash
@@ -159,14 +160,15 @@ class EnhancedCacheService:
                             text: str, 
                             from_lang: str, 
                             to_lang: str, 
-                            model: str) -> Optional[Dict[str, Any]]:
+                            model: str,
+                            translation_mode: str = "succinct") -> Optional[Dict[str, Any]]:
         """Get cached translation if available."""
         # Load from disk on first use
         if not self._loaded_from_disk and self.persist_to_disk:
             await self._load_from_disk()
             self._loaded_from_disk = True
             
-        cache_key = self._generate_cache_key(text, from_lang, to_lang, model)
+        cache_key = self._generate_cache_key(text, from_lang, to_lang, model, translation_mode)
         
         if cache_key not in self._cache:
             self.stats["misses"] += 1
@@ -209,9 +211,10 @@ class EnhancedCacheService:
                               from_lang: str, 
                               to_lang: str, 
                               model: str,
-                              translation: str) -> bool:
+                              translation: str,
+                              translation_mode: str = "succinct") -> bool:
         """Store translation in cache."""
-        cache_key = self._generate_cache_key(text, from_lang, to_lang, model)
+        cache_key = self._generate_cache_key(text, from_lang, to_lang, model, translation_mode)
         
         # Compress if needed
         stored_translation, is_compressed = self._compress_data(translation)

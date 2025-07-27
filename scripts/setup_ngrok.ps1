@@ -2,8 +2,9 @@
 # Run this after getting your auth token from https://dashboard.ngrok.com/get-started/your-authtoken
 
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$AuthToken
+    [Parameter(Mandatory=$false)]
+    [string]$AuthToken,
+    [switch]$SkipWarning
 )
 
 Write-Host "🔐 Setting up ngrok authentication..." -ForegroundColor Green

@@ -203,7 +203,8 @@ async def get_supported_languages() -> SupportedLanguagesResponse:
 async def demo_translate(
     q: str = Form(..., description="Text to translate"),
     from_lang: str = Form("en", alias="from", description="Source language"),
-    to_lang: str = Form("zh", alias="to", description="Target language")
+    to_lang: str = Form("zh", alias="to", description="Target language"),
+    translation_mode: str = Form("succinct", description="Translation mode: succinct or verbose")
 ):
     """
     Demo translation endpoint that generates proper signature for testing.
@@ -225,7 +226,8 @@ async def demo_translate(
             **{"from": demo_request["from"], "to": demo_request["to"]},  # Use aliases
             appid=demo_request["appid"],
             salt=demo_request["salt"],
-            sign=demo_request["sign"]
+            sign=demo_request["sign"],
+            translation_mode=translation_mode
         )
         
         # Perform translation

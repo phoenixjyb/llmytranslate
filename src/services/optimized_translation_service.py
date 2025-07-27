@@ -22,6 +22,7 @@ class TranslationRequest:
     model: Optional[str] = None
     use_cache: bool = True
     max_length: Optional[int] = None
+    translation_mode: str = "succinct"  # "succinct" or "verbose"
 
 @dataclass
 class TranslationResult:
@@ -123,7 +124,8 @@ class OptimizedTranslationService:
                     normalized_text,
                     request.from_lang,
                     request.to_lang,
-                    model
+                    model,
+                    request.translation_mode
                 )
             
             timing_breakdown["cache_lookup_ms"] = round((time.time() - cache_start) * 1000, 2)
@@ -160,7 +162,8 @@ class OptimizedTranslationService:
                 text=normalized_text,
                 from_lang=request.from_lang,
                 to_lang=request.to_lang,
-                model=model
+                model=model,
+                translation_mode=request.translation_mode
             )
             
             timing_breakdown["llm_inference_ms"] = round((time.time() - llm_start) * 1000, 2)
@@ -185,7 +188,8 @@ class OptimizedTranslationService:
                     request.from_lang,
                     request.to_lang,
                     model,
-                    translation
+                    translation,
+                    request.translation_mode
                 )
             
             timing_breakdown["cache_store_ms"] = round((time.time() - cache_store_start) * 1000, 2)

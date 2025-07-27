@@ -145,20 +145,53 @@ class OptimizedOllamaClient:
                        text: str, 
                        from_lang: str = "en", 
                        to_lang: str = "zh",
-                       model: str = None) -> Dict[str, Any]:
+                       model: str = None,
+                       translation_mode: str = "succinct") -> Dict[str, Any]:
         """
         Optimized translation with detailed timing breakdown.
         """
         if not model:
             model = self.default_model
             
-        # Create optimized prompt
-        if from_lang == "en" and to_lang == "zh":
-            prompt = f"Translate to Chinese: {text}"
-        elif from_lang == "zh" and to_lang == "en":
-            prompt = f"Translate to English: {text}"
+        # Create optimized prompt based on translation mode
+        if translation_mode == "verbose":
+            # Verbose mode with explanations and alternatives
+            if from_lang == "en" and to_lang == "zh":
+                prompt = f"""Translate "{text}" from English to Chinese. Provide multiple translation options with explanations of nuances, grammar breakdowns, and cultural context where relevant.
+
+Please provide:
+1. The most common/general translation
+2. Alternative translations with different nuances
+3. Brief explanations of grammar or cultural context
+4. Pronunciation guides where helpful
+
+Translation with explanations:"""
+            elif from_lang == "zh" and to_lang == "en":
+                prompt = f"""Translate "{text}" from Chinese to English. Provide multiple translation options with explanations of nuances, grammar breakdowns, and cultural context where relevant.
+
+Please provide:
+1. The most common/general translation
+2. Alternative translations with different nuances
+3. Brief explanations of grammar or cultural context
+
+Translation with explanations:"""
+            else:
+                prompt = f"""Translate "{text}" from {from_lang} to {to_lang}. Provide multiple translation options with explanations of nuances, grammar breakdowns, and cultural context where relevant.
+
+Please provide:
+1. The most common/general translation
+2. Alternative translations with different nuances
+3. Brief explanations of grammar or cultural context
+
+Translation with explanations:"""
         else:
-            prompt = f"Translate from {from_lang} to {to_lang}: {text}"
+            # Succinct mode - direct translation only
+            if from_lang == "en" and to_lang == "zh":
+                prompt = f"Translate to Chinese (provide ONLY the translation): {text}"
+            elif from_lang == "zh" and to_lang == "en":
+                prompt = f"Translate to English (provide ONLY the translation): {text}"
+            else:
+                prompt = f"Translate from {from_lang} to {to_lang} (provide ONLY the translation): {text}"
         
         return await self.generate(
             prompt=prompt,

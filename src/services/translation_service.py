@@ -239,7 +239,8 @@ class TranslationService:
                 cache_key = ollama_client.create_cache_key(
                     request.q,
                     request.from_lang,
-                    request.to
+                    request.to,
+                    translation_mode=getattr(request, 'translation_mode', 'succinct')
                 )
                 return await cache_service.get_translation(cache_key)
         except Exception as e:
@@ -257,7 +258,8 @@ class TranslationService:
                 cache_key = ollama_client.create_cache_key(
                     request.q,
                     request.from_lang,
-                    request.to
+                    request.to,
+                    translation_mode=getattr(request, 'translation_mode', 'succinct')
                 )
                 await cache_service.set_translation(
                     cache_key,
@@ -285,7 +287,8 @@ class TranslationService:
                 result = await ollama_client.generate_translation(
                     text=request.q,
                     source_lang=request.from_lang,
-                    target_lang=request.to
+                    target_lang=request.to,
+                    translation_mode=getattr(request, 'translation_mode', 'succinct')
                 )
                 
                 if timer:

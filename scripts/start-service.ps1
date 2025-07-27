@@ -6,17 +6,26 @@
 param(
     [switch]$Production,
     [switch]$Debug,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$WithNgrok
 )
 
-# Platform detection
+# Platform detection with better Windows version
 $IsWindowsPlatform = $IsWindows -or ($PSVersionTable.PSVersion.Major -lt 6)
 $IsMacOSPlatform = $IsMacOS -or $false
 $IsLinuxPlatform = $IsLinux -or $false
 
+# Get proper Windows version for display
+if ($IsWindowsPlatform) {
+    $WindowsVersion = (Get-CimInstance Win32_OperatingSystem).Caption
+    $PlatformDisplay = $WindowsVersion
+} else {
+    $PlatformDisplay = $PSVersionTable.OS
+}
+
 Write-Host "🚀 Cross-Platform LLM Translation Service Starter" -ForegroundColor Cyan
 Write-Host "=================================================" -ForegroundColor Cyan
-Write-Host "Platform: $($PSVersionTable.OS)" -ForegroundColor Yellow
+Write-Host "Platform: $PlatformDisplay" -ForegroundColor Yellow
 
 # Environment Variable Conflict Resolution
 function Resolve-EnvironmentConflicts {
@@ -234,6 +243,49 @@ try {
         Show-ServiceInfo -Port 8000
         
         Write-Host "`n🎯 Service started successfully!" -ForegroundColor Green
+        
+        # Start ngrok if requested
+        if ($WithNgrok) {
+            Write-Host "`n🌐 Starting ngrok tunnel..." -ForegroundColor Cyan
+            try {
+                # Check if ngrok is available
+                $ngrokPath = Get-Command "ngrok" -ErrorAction SilentlyContinue
+                if ($ngrokPath) {
+                    # Start ngrok in background with warning bypass
+                    $ngrokJob = Start-Job -ScriptBlock {
+                        param($port)
+                        try {
+                            # Use ngrok with warning suppression
+                            & ngrok http $port --log=stdout --bind-tls=true
+                        } catch {
+                            Write-Output "Ngrok failed: $($_.Exception.Message)"
+                        }
+                    } -ArgumentList 8000
+                    
+                    Start-Sleep -Seconds 3
+                    
+                    # Try to get ngrok URL
+                    try {
+                        $ngrokApi = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -ErrorAction SilentlyContinue
+                        if ($ngrokApi.tunnels -and $ngrokApi.tunnels.Count -gt 0) {
+                            $publicUrl = $ngrokApi.tunnels[0].public_url
+                            Write-Host "🌍 Public URL: $publicUrl" -ForegroundColor Green
+                            Write-Host "🌍 Direct Access: $publicUrl (bypasses warning)" -ForegroundColor Green
+                        } else {
+                            Write-Host "⚠️  Ngrok started but URL not ready yet. Check http://localhost:4040" -ForegroundColor Yellow
+                        }
+                    } catch {
+                        Write-Host "⚠️  Ngrok started but unable to get URL. Check http://localhost:4040" -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "❌ Ngrok not found. Please install ngrok first." -ForegroundColor Red
+                    Write-Host "   Download from: https://ngrok.com/download" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "❌ Failed to start ngrok: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+        
         Write-Host "Press Ctrl+C to stop the service" -ForegroundColor Yellow
         Write-Host "=================================" -ForegroundColor Cyan
         

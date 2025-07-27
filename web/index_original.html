@@ -383,32 +383,6 @@
             </div>
         </div>
 
-        <div class="form-row">
-            <div>
-                <label for="optimizedMode">⚡ Performance Mode:</label>
-                <select id="optimizedMode">
-                    <option value="true">🚀 Optimized (Recommended)</option>
-                    <option value="false">📝 Standard (Baidu Compatible)</option>
-                </select>
-            </div>
-            
-            <div>
-                <label for="useCache">💾 Use Cache:</label>
-                <select id="useCache">
-                    <option value="true">✅ Yes (Faster)</option>
-                    <option value="false">❌ No (Fresh)</option>
-                </select>
-            </div>
-            
-            <div>
-                <label for="showStats">📊 Show Performance:</label>
-                <select id="showStats">
-                    <option value="true">✅ Yes</option>
-                    <option value="false">❌ No</option>
-                </select>
-            </div>
-        </div>
-
         <div class="button-group">
             <button class="btn btn-primary" id="translateBtn">
                 🔄 Translate
@@ -671,6 +645,7 @@
         }
 
         async function translateText() {
+            // Simple test first
             console.log('translateText function called!');
             
             if (isTranslating) {
@@ -684,19 +659,15 @@
             const sourceLang = document.getElementById('sourceLang').value;
             const targetLang = document.getElementById('targetLang').value;
             const serverUrl = document.getElementById('serverUrl').value.trim();
-            const optimizedMode = document.getElementById('optimizedMode').value === 'true';
-            const useCache = document.getElementById('useCache').value === 'true';
-            const showStats = document.getElementById('showStats').value === 'true';
             const resultDiv = document.getElementById('result');
             const translateBtn = document.getElementById('translateBtn');
 
+            // Add visible debugging
             console.log('=== TRANSLATION DEBUG START ===');
             console.log('Source text:', sourceText);
             console.log('Source lang:', sourceLang);
             console.log('Target lang:', targetLang);
             console.log('Server URL:', serverUrl);
-            console.log('Optimized mode:', optimizedMode);
-            console.log('Use cache:', useCache);
             
             // Test connectivity first
             console.log('Testing connectivity to server...');
@@ -739,112 +710,86 @@
             // Start translation
             isTranslating = true;
             translateBtn.disabled = true;
+            translateBtn.innerHTML = '⏳ Translating...';
             
-            if (optimizedMode) {
-                translateBtn.innerHTML = '🚀 Optimizing...';
-                resultDiv.className = 'result-area loading';
-                resultDiv.innerHTML = '<div class="loading-spinner"></div><p style="margin-left: 15px;">🚀 Processing with optimized service...</p>';
-            } else {
-                translateBtn.innerHTML = '⏳ Translating...';
-                resultDiv.className = 'result-area loading';
-                resultDiv.innerHTML = '<div class="loading-spinner"></div><p style="margin-left: 15px;">Translating with standard service...</p>';
-            }
+            resultDiv.className = 'result-area loading';
+            resultDiv.innerHTML = '<div class="loading-spinner"></div><p style="margin-left: 15px;">Translating with GPU acceleration...</p>';
 
             try {
                 const startTime = Date.now();
                 
-                if (optimizedMode) {
-                    // Use optimized endpoint
-                    await performOptimizedTranslation(serverUrl, sourceText, sourceLang, targetLang, useCache, showStats, startTime);
+                // Use demo endpoint for simplicity (no auth required)
+                const formData = new FormData();
+                formData.append('q', sourceText);
+                formData.append('from', sourceLang);
+                formData.append('to', targetLang);
+
+                console.log('Making request to:', `${serverUrl}/api/demo/translate`);
+                console.log('Request data:', {q: sourceText, from: sourceLang, to: targetLang});
+                console.log('Current location origin:', window.location.origin);
+                console.log('Target server URL:', serverUrl);
+
+                // Add headers for better compatibility with ngrok
+                const requestOptions = {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'Accept': 'application/json',
+                        // Add ngrok-skip-browser-warning header if accessing via ngrok
+                        ...(serverUrl.includes('ngrok') && {'ngrok-skip-browser-warning': 'true'})
+                    }
+                };
+
+                console.log('Request options:', requestOptions);
+                
+                const response = await fetch(`${serverUrl}/api/demo/translate`, requestOptions);
+
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+
+                const responseTime = Date.now() - startTime;
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Full response data:', data);
+                    
+                    // Handle demo endpoint response structure
+                    const responseData = data.response || data;
+                    console.log('Extracted responseData:', responseData);
+                    
+                    if (responseData.trans_result && responseData.trans_result.length > 0) {
+                        const result = responseData.trans_result[0];
+                        console.log('Translation result:', result);
+                        showTranslationResult(result.src, result.dst, responseData.from_lang || responseData.from, responseData.to, responseTime);
+                    } else {
+                        console.error('No trans_result found in responseData:', responseData);
+                        showResult('error', '❌ No translation result received');
+                    }
                 } else {
-                    // Use standard demo endpoint
-                    await performStandardTranslation(serverUrl, sourceText, sourceLang, targetLang, startTime);
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorResponse = errorData.response || errorData;
+                    console.error('Response not ok:', response.status, errorResponse);
+                    showResult('error', `❌ Translation failed: ${errorResponse.error_msg || errorData.error || response.statusText}`);
                 }
             } catch (error) {
-                console.error('Translation error:', error);
-                showResult('error', `❌ Translation failed: ${error.message}`);
+                console.error('Network/Request error:', error);
+                console.error('Error type:', error.constructor.name);
+                console.error('Error message:', error.message);
+                console.error('Error stack:', error.stack);
+                
+                let errorMessage = `❌ Network error: ${error.message}`;
+                
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    errorMessage = '❌ Network error: Unable to connect to server. Check if the server URL is correct and accessible.';
+                } else if (error.name === 'TypeError' && error.message.includes('CORS')) {
+                    errorMessage = '❌ CORS error: The server is not allowing requests from this origin.';
+                }
+                
+                showResult('error', errorMessage);
             } finally {
                 isTranslating = false;
                 translateBtn.disabled = false;
                 translateBtn.innerHTML = '🔄 Translate';
-            }
-        }
-
-        async function performOptimizedTranslation(serverUrl, sourceText, sourceLang, targetLang, useCache, showStats, startTime) {
-            const formData = new FormData();
-            formData.append('q', sourceText);
-            formData.append('from', sourceLang);
-            formData.append('to', targetLang);
-            formData.append('use_cache', useCache.toString());
-
-            console.log('Making optimized request to:', `${serverUrl}/api/optimized/translate`);
-
-            const requestOptions = {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Accept': 'application/json',
-                    ...(serverUrl.includes('ngrok') && {'ngrok-skip-browser-warning': 'true'})
-                }
-            };
-
-            const response = await fetch(`${serverUrl}/api/optimized/translate`, requestOptions);
-            console.log('Optimized response status:', response.status);
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            console.log('Optimized response data:', data);
-
-            const responseTime = Date.now() - startTime;
-
-            if (data.success && data.translation) {
-                showOptimizedTranslationResult(data, responseTime, showStats);
-            } else {
-                throw new Error(data.error || 'Unknown error occurred');
-            }
-        }
-
-        async function performStandardTranslation(serverUrl, sourceText, sourceLang, targetLang, startTime) {
-            const formData = new FormData();
-            formData.append('q', sourceText);
-            formData.append('from', sourceLang);
-            formData.append('to', targetLang);
-
-            console.log('Making standard request to:', `${serverUrl}/api/demo/translate`);
-
-            const requestOptions = {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Accept': 'application/json',
-                    ...(serverUrl.includes('ngrok') && {'ngrok-skip-browser-warning': 'true'})
-                }
-            };
-
-            const response = await fetch(`${serverUrl}/api/demo/translate`, requestOptions);
-            console.log('Standard response status:', response.status);
-
-            const responseTime = Date.now() - startTime;
-
-            if (response.ok) {
-                const data = await response.json();
-                console.log('Standard response data:', data);
-                
-                const responseData = data.response || data;
-                
-                if (responseData.trans_result && responseData.trans_result.length > 0) {
-                    const result = responseData.trans_result[0];
-                    showTranslationResult(result.src, result.dst, responseData.from_lang || responseData.from, responseData.to, responseTime);
-                } else {
-                    throw new Error('No translation result received');
-                }
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                const errorResponse = errorData.response || errorData;
-                throw new Error(errorResponse.error_msg || errorData.error || response.statusText);
             }
         }
 
@@ -867,84 +812,6 @@
                     <span><strong>Characters:</strong> ${originalText.length}</span>
                 </div>
             `;
-        }
-
-        function showOptimizedTranslationResult(data, responseTime, showStats) {
-            const resultDiv = document.getElementById('result');
-            const timing = data.timing_breakdown || {};
-            const metrics = data.performance_metrics || {};
-            const cacheStatus = data.cached ? '🔥 Cached' : '❄️ Fresh';
-            const cacheClass = data.cached ? 'success' : 'warning';
-            
-            let resultHTML = `
-                <button class="copy-button" onclick="copyToClipboard('${data.translation.replace(/'/g, "\\'")}')">
-                    📋 Copy
-                </button>
-                <div class="translation-result">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <strong>🚀 Optimized Translation:</strong>
-                        <span class="status-indicator status-${data.cached ? 'online' : 'offline'}" style="font-size: 0.8em; padding: 4px 12px;">
-                            ${cacheStatus}
-                        </span>
-                    </div>
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
-                        ${data.translation}
-                    </div>
-                </div>
-                <div class="translation-meta">
-                    <span><strong>Model:</strong> ${data.model_used}</span>
-                    <span><strong>Direction:</strong> ${data.request.from} → ${data.request.to}</span>
-                    <span><strong>Total Time:</strong> ${timing.total_ms ? timing.total_ms.toFixed(1) : responseTime}ms</span>
-                    <span><strong>Cache:</strong> ${data.cached ? 'Hit' : 'Miss'}</span>
-                </div>
-            `;
-
-            if (showStats && timing && Object.keys(timing).length > 0) {
-                resultHTML += `
-                    <div style="margin-top: 20px; padding: 15px; background: #f0f4f8; border-radius: 8px;">
-                        <h4 style="margin: 0 0 15px 0; color: #4a5568;">⚡ Performance Breakdown</h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
-                `;
-                
-                if (timing.validation_ms !== undefined) {
-                    resultHTML += `<div><strong>Validation:</strong> ${timing.validation_ms.toFixed(1)}ms</div>`;
-                }
-                if (timing.cache_lookup_ms !== undefined) {
-                    resultHTML += `<div><strong>Cache Lookup:</strong> ${timing.cache_lookup_ms.toFixed(1)}ms</div>`;
-                }
-                if (timing.llm_inference_ms !== undefined) {
-                    resultHTML += `<div><strong>LLM Inference:</strong> ${timing.llm_inference_ms.toFixed(1)}ms</div>`;
-                }
-                if (timing.cache_store_ms !== undefined) {
-                    resultHTML += `<div><strong>Cache Store:</strong> ${timing.cache_store_ms.toFixed(1)}ms</div>`;
-                }
-                
-                resultHTML += `</div>`;
-                
-                if (metrics.ollama_metrics) {
-                    const ollama = metrics.ollama_metrics;
-                    resultHTML += `
-                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0;">
-                            <strong>🧠 LLM Metrics:</strong>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 8px;">
-                    `;
-                    if (ollama.tokens_per_second) {
-                        resultHTML += `<div><small>Tokens/sec:</small> <strong>${ollama.tokens_per_second.toFixed(1)}</strong></div>`;
-                    }
-                    if (ollama.total_tokens) {
-                        resultHTML += `<div><small>Total tokens:</small> <strong>${ollama.total_tokens}</strong></div>`;
-                    }
-                    if (ollama.eval_count) {
-                        resultHTML += `<div><small>Output tokens:</small> <strong>${ollama.eval_count}</strong></div>`;
-                    }
-                    resultHTML += `</div></div>`;
-                }
-                
-                resultHTML += `</div>`;
-            }
-            
-            resultDiv.className = 'result-area success';
-            resultDiv.innerHTML = resultHTML;
         }
 
         function showResult(type, message) {

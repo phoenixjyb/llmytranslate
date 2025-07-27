@@ -5,7 +5,7 @@ FastAPI application setup and configuration.
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import time
 import os
@@ -106,9 +106,38 @@ def create_app() -> FastAPI:
     if web_dir.exists():
         app.mount("/web", StaticFiles(directory=str(web_dir), html=True), name="web")
     
-    # Root endpoint
-    @app.get("/")
+    # Serve optimized interface at root
+    @app.get("/", response_class=HTMLResponse)
     async def root():
+        web_dir = Path(__file__).parent.parent / "web"
+        optimized_html = web_dir / "optimized.html"
+        if optimized_html.exists():
+            return HTMLResponse(content=optimized_html.read_text(encoding='utf-8'))
+        else:
+            # Fallback to service info if optimized.html doesn't exist
+            service_info = network_manager.get_service_info()
+            return {
+                "name": settings.api.title,
+                "version": settings.api.version,
+                "description": settings.api.description,
+                "deployment_mode": settings.deployment.mode,
+                "connection_url": network_manager.get_connection_url(),
+                "docs_url": "/docs" if settings.debug else None,
+                "web_interface": "/web/",
+                "service_discovery": "/api/discovery/info",
+                "endpoints": {
+                    "health": "/api/health",
+                    "translate": "/api/trans/vip/translate",
+                    "demo_translate": "/api/demo/translate",
+                    "optimized_translate": "/api/optimized/translate",
+                    "performance_stats": "/api/optimized/stats",
+                    "benchmark": "/api/optimized/benchmark"
+                }
+            }
+    
+    # Service info endpoint for programmatic access
+    @app.get("/api/info")
+    async def service_info():
         service_info = network_manager.get_service_info()
         return {
             "name": settings.api.title,
@@ -117,7 +146,7 @@ def create_app() -> FastAPI:
             "deployment_mode": settings.deployment.mode,
             "connection_url": network_manager.get_connection_url(),
             "docs_url": "/docs" if settings.debug else None,
-            "web_interface": "/web/",
+            "web_interface": "/",
             "service_discovery": "/api/discovery/info",
             "endpoints": {
                 "health": "/api/health",
