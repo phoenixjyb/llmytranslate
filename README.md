@@ -22,19 +22,20 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
 ## 🚀 Features
 
 - 🚀 **Local LLM Translation**: Uses Ollama for local LLM management and translation
-- ⚡ **Extreme Performance**: 30.8% faster cold cache, 244,891x faster warm cache with optimized endpoints
+- ⚡ **Extreme Performance**: 30.8% faster cold cache, 244,891x faster warm cache with optimized endpoints  
 - 🔄 **Bidirectional Translation**: Chinese ↔ English translation support with auto-detection
+- 🎛️ **Dual Translation Modes**: Succinct (default) for clean output, Verbose for detailed explanations
 - 🔗 **API Compatibility**: Drop-in replacement for Baidu Translate API with signature validation
 - 🏎️ **Connection Pooling**: Persistent HTTP connections with 100% reuse rate for maximum efficiency
-- 🗄️ **Smart Caching**: Enhanced LRU cache with gzip compression and persistent storage
+- 🗄️ **Smart Caching**: Enhanced LRU cache with gzip compression and mode-aware cache keys
 - 📊 **Real-time Monitoring**: Live performance metrics, timing breakdowns, and cache statistics
 - 🎯 **Model Optimization**: Smart model selection (Gemma3/Llama3.1) based on performance benchmarks
 - 🔐 **Authentication**: API key-based authentication with configurable rate limiting
 - 🐳 **Docker Ready**: Complete containerization support with docker-compose
 - 🛡️ **Robust Error Handling**: Graceful fallbacks and comprehensive error responses
 - 📝 **Auto Documentation**: Interactive API documentation with FastAPI/OpenAPI
-- 🌐 **Deployment Modes**: Local and remote deployment with service discovery
-- 🔍 **Service Discovery**: Automatic detection and connection of translation services
+- 🌐 **Cross-Platform**: Complete shell script support for Windows, Linux, and macOS
+- 🔍 **Service Discovery**: Automatic detection and connection of translation services  
 - 🛑 **Service Management**: Comprehensive start/stop scripts for all platforms
 - 🚇 **Remote Access**: Built-in ngrok integration for worldwide access (tested from remote networks)
 
@@ -203,7 +204,118 @@ python test_ollama_connectivity.py
 python discover_service.py
 ```
 
-## 🐳 Docker Deployment
+## � Project Structure
+
+### Root Directory
+```
+llmytranslate/
+├── src/                    # Core application source code
+├── scripts/                # Automation and utility scripts  
+├── tests/                  # Test suites and validation
+├── performance/            # Performance testing and results
+├── config/                 # Configuration templates
+├── docker/                 # Docker deployment files
+├── docs/                   # Comprehensive documentation
+├── logs/                   # Application and service logs
+├── docker-compose.yml      # Local Docker setup
+├── requirements.txt        # Python dependencies
+├── run.py                  # Direct Python entry point
+├── translation_server.py   # Legacy server (use run.py instead)
+└── validate.py            # Installation validator
+```
+
+### Key Directories
+
+#### 📂 src/ - Application Core
+```
+src/
+├── api/
+│   └── routes/            # API endpoint definitions
+├── core/
+│   ├── config.py         # Configuration management
+│   ├── network.py        # Network and discovery services
+│   └── production_config.py  # Production settings
+├── models/
+│   └── schemas.py        # Data models and validation
+└── services/
+    ├── translation_service.py  # Core translation logic
+    ├── ollama_client.py         # LLM integration
+    ├── auth_service.py          # Authentication handling
+    ├── cache_service.py         # Response caching
+    └── stats_service.py         # Usage analytics
+```
+
+#### 🔧 scripts/ - Cross-Platform Automation
+```
+scripts/
+├── *.ps1                 # PowerShell scripts (Windows primary)
+├── *.sh                  # Shell scripts (Linux/macOS + Windows/WSL)
+├── *.bat                 # Batch scripts (Windows fallback)
+├── deploy-online.ps1/.sh # Cloud deployment automation
+├── production-setup.ps1/.sh  # Production environment setup
+├── service-manager.ps1/.sh   # Service lifecycle management
+├── setup_remote_access.ps1/.sh  # Remote access configuration
+└── README.md             # Script usage documentation
+```
+
+#### 🧪 tests/ - Quality Assurance
+```
+tests/
+├── unit/                 # Unit test cases
+├── integration/          # API and service integration tests
+├── examples/             # Usage examples and quick tests
+├── test_baidu_compatibility.py  # Baidu API compatibility
+└── test_*.py             # Various test scenarios
+```
+
+#### ⚡ performance/ - Optimization & Monitoring
+```
+performance/
+├── test_*.py             # Performance test scripts
+├── *.json                # Performance test results
+├── benchmarks/           # Benchmark data and analysis
+└── README.md             # Performance testing guide
+```
+
+#### ⚙️ config/ - Configuration Management
+```
+config/
+├── .env.remote           # Remote deployment template
+├── nginx.conf            # Nginx configuration
+├── requirements-minimal.txt  # Minimal dependencies
+└── README.md             # Configuration guide
+```
+
+#### 🐳 docker/ - Container Deployment
+```
+docker/
+├── Dockerfile            # Container build instructions
+├── docker-compose.yml    # Service orchestration
+├── docker-compose.remote.yml  # Remote deployment variant
+├── nginx.remote.conf     # Remote nginx configuration
+└── README.md             # Docker deployment guide
+```
+
+#### 📚 docs/ - Documentation Hub
+```
+docs/
+├── api/                  # API documentation and examples
+├── architecture/         # System design and architecture
+├── guides/               # Setup and usage guides
+├── setup/                # Platform-specific setup instructions
+└── *.md                  # Various documentation files
+```
+
+### File Organization Principles
+
+- **Cross-Platform Support**: All scripts available in PowerShell (.ps1), Shell (.sh), and Batch (.bat) formats
+- **Environment Separation**: Clear distinction between local, remote, and production configurations
+- **Modular Architecture**: Core functionality separated into logical service modules
+- **Comprehensive Testing**: Unit, integration, and performance tests organized by category
+- **Documentation First**: Every directory includes a README.md explaining its purpose
+- **Automation Ready**: Scripts handle complex deployment scenarios with minimal user intervention
+
+## �🐳 Docker Deployment
 
 ### Local Docker Deployment
 ```bash
