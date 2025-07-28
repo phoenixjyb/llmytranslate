@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Chatbot - Cross Platform</title>
+    <link rel="stylesheet" href="assets/chat.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>🤖 LLM Translation & Chat Assistant</h1>
+            <div class="platform-info">
+                <span id="platform-badge">Detecting platform...</span>
+                <span id="connection-status" class="status-connecting">Connecting...</span>
+            </div>
+        </div>
+        
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot-message">
+                <div class="message-content">
+                    <strong>Assistant:</strong> Hello! I'm your AI assistant powered by Ollama. I can help you with conversations and translations. How can I assist you today?
+                </div>
+                <div class="message-time"></div>
+            </div>
+        </div>
+        
+        <div class="chat-input-container">
+            <div class="chat-input">
+                <input type="text" id="message-input" placeholder="Type your message... (Ctrl+Enter to send)" maxlength="10000">
+                <button onclick="sendMessage()" id="send-button">
+                    <span class="send-text">Send</span>
+                    <span class="send-loading" style="display: none;">...</span>
+                </button>
+            </div>
+            <div class="chat-controls">
+                <button onclick="clearChat()" class="clear-btn">Clear Chat</button>
+                <button onclick="showConversations()" class="history-btn">History</button>
+                <select id="model-select" onchange="changeModel()">
+                    <option value="gemma3:latest">Gemma3 (Default)</option>
+                    <option value="llama3.1:8b">Llama 3.1 8B</option>
+                    <option value="llava:latest">LLaVA (Vision)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Conversations Modal -->
+    <div id="conversations-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Conversation History</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="conversations-list">Loading...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Cross-platform detection
+        function detectPlatform() {
+            const platform = navigator.platform.toLowerCase();
+            const userAgent = navigator.userAgent.toLowerCase();
+            
+            let detectedPlatform = 'unknown';
+            
+            if (platform.includes('win')) {
+                detectedPlatform = 'windows';
+            } else if (platform.includes('mac') || userAgent.includes('mac')) {
+                detectedPlatform = 'macos';
+            } else if (platform.includes('linux') || userAgent.includes('linux')) {
+                detectedPlatform = 'linux';
+            }
+            
+            document.getElementById('platform-badge').textContent = 
+                `Platform: ${detectedPlatform.charAt(0).toUpperCase() + detectedPlatform.slice(1)}`;
+            
+            return detectedPlatform;
+        }
+        
+        // Initialize platform detection
+        const currentPlatform = detectPlatform();
+        
+        // Platform-specific keyboard shortcuts
+        if (currentPlatform === 'macos') {
+            document.addEventListener('keydown', function(e) {
+                if (e.metaKey && e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+            document.getElementById('message-input').placeholder = "Type your message... (Cmd+Enter to send)";
+        } else {
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        }
+        
+        // Regular Enter key support
+        document.getElementById('message-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // Check connection on load
+        window.addEventListener('load', function() {
+            checkConnection();
+        });
+    </script>
+    <script src="assets/chat.js"></script>
+</body>
+</html>

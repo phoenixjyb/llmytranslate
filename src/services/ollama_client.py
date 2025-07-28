@@ -281,6 +281,111 @@ Translation:"""
         
         return translation
     
+    async def generate(
+        self,
+        prompt: str,
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        options: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Generate a response using Ollama for general chat/conversation."""
+        model = model or self.model_name
+        
+        # Merge provided options with defaults
+        default_options = {
+            "temperature": temperature,
+            "top_p": 0.9,
+            "num_predict": max_tokens or -1,
+        }
+        if options:
+            default_options.update(options)
+        
+        request_data = OllamaRequest(
+            model=model,
+            prompt=prompt,
+            stream=False,
+            options=default_options
+        )
+        
+        for attempt in range(self.max_retries):
+            try:
+                full_url = f"{self.base_url}/api/generate"
+                logger.info(
+                    "Sending chat request to Ollama",
+                    attempt=attempt + 1,
+                    model=model,
+                    prompt_length=len(prompt),
+                    full_url=full_url,
+                    base_url=self.base_url
+                )
+                
+                if not self.client:
+                    # Create a new client for this request with explicit proxy bypass
+                    async with httpx.AsyncClient(
+                        timeout=httpx.Timeout(self.timeout),
+                        trust_env=False  # Don't use environment proxy settings
+                    ) as client:
+                        response = await client.post(
+                            full_url,
+                            json=request_data.dict(),
+                            headers={"Content-Type": "application/json"}
+                        )
+                else:
+                    response = await self.client.post(
+                        "/api/generate",
+                        json=request_data.dict(),
+                        headers={"Content-Type": "application/json"}
+                    )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    logger.info(
+                        "Chat response received from Ollama",
+                        model=model,
+                        response_length=len(result.get("response", ""))
+                    )
+                    
+                    return {
+                        "success": True,
+                        "response": result.get("response", ""),
+                        "model": model,
+                        "done": result.get("done", True),
+                        "total_duration": result.get("total_duration"),
+                        "load_duration": result.get("load_duration"),
+                        "prompt_eval_count": result.get("prompt_eval_count"),
+                        "eval_count": result.get("eval_count")
+                    }
+                else:
+                    logger.warning(
+                        "Chat request failed",
+                        status_code=response.status_code,
+                        response=response.text[:500]
+                    )
+                    
+            except Exception as e:
+                logger.warning(
+                    "Chat request exception",
+                    attempt=attempt + 1,
+                    error=str(e)
+                )
+                
+                if attempt == self.max_retries - 1:
+                    return {
+                        "success": False,
+                        "error": str(e),
+                        "response": None
+                    }
+                
+                await asyncio.sleep(2 ** attempt)
+        
+        return {
+            "success": False,
+            "error": "Max retries exceeded",
+            "response": None
+        }
+    
     def create_cache_key(
         self,
         text: str,

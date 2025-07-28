@@ -49,36 +49,44 @@ class NetworkManager:
     def get_local_ip(self, interface: str = "auto") -> str:
         """Get the local IP address for the specified interface."""
         try:
-            if interface == "auto":
-                # Try to find the best interface
-                interfaces = netifaces.interfaces()
-                
-                # Prefer ethernet, then wifi, then any other
-                preferred_order = ['eth0', 'ens', 'enp', 'wlan0', 'wlp']
-                
-                for pref in preferred_order:
+            if USE_NETIFACES:
+                if interface == "auto":
+                    # Try to find the best interface
+                    interfaces = netifaces.interfaces()
+                    
+                    # Prefer ethernet, then wifi, then any other
+                    preferred_order = ['eth0', 'ens', 'enp', 'wlan0', 'wlp']
+                    
+                    for pref in preferred_order:
+                        for iface in interfaces:
+                            if pref in iface and iface != 'lo':
+                                addresses = netifaces.ifaddresses(iface)
+                                if netifaces.AF_INET in addresses:
+                                    ip = addresses[netifaces.AF_INET][0]['addr']
+                                    if not ip.startswith('127.'):
+                                        return ip
+                    
+                    # Fallback: use any non-loopback interface
                     for iface in interfaces:
-                        if pref in iface and iface != 'lo':
+                        if iface != 'lo':
                             addresses = netifaces.ifaddresses(iface)
                             if netifaces.AF_INET in addresses:
                                 ip = addresses[netifaces.AF_INET][0]['addr']
                                 if not ip.startswith('127.'):
                                     return ip
-                
-                # Fallback: use any non-loopback interface
-                for iface in interfaces:
-                    if iface != 'lo':
-                        addresses = netifaces.ifaddresses(iface)
+                else:
+                    # Use specific interface
+                    if interface in netifaces.interfaces():
+                        addresses = netifaces.ifaddresses(interface)
                         if netifaces.AF_INET in addresses:
-                            ip = addresses[netifaces.AF_INET][0]['addr']
-                            if not ip.startswith('127.'):
-                                return ip
+                            return addresses[netifaces.AF_INET][0]['addr']
+            
+            # Fallback for when netifaces is not available
             else:
-                # Use specific interface
-                if interface in netifaces.interfaces():
-                    addresses = netifaces.ifaddresses(interface)
-                    if netifaces.AF_INET in addresses:
-                        return addresses[netifaces.AF_INET][0]['addr']
+                # Use basic socket method as fallback
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    s.connect(("8.8.8.8", 80))
+                    return s.getsockname()[0]
                         
         except Exception as e:
             logger.warning(f"Could not determine local IP: {e}")

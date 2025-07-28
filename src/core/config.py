@@ -38,13 +38,23 @@ class OllamaSettings(BaseSettings):
     """Ollama service configuration."""
     
     ollama_host: str = Field(
-        default="http://localhost:11434",
+        default="http://127.0.0.1:11434",
         description="Ollama server host"
     )
     model_name: str = Field(
         default="llama3.1:8b",
         description="Default LLM model name"
     )
+    
+    class Config:
+        env_prefix = "OLLAMA__"
+        
+    def __init__(self, **kwargs):
+        # Check for OLLAMA_HOST environment variable first
+        import os
+        if "OLLAMA_HOST" in os.environ:
+            kwargs["ollama_host"] = os.environ["OLLAMA_HOST"]
+        super().__init__(**kwargs)
     request_timeout: int = Field(
         default=60,
         description="Request timeout in seconds"

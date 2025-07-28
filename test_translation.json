@@ -1,8 +1,0 @@
-{
-  "q": "Hello world", 
-  "from": "en", 
-  "to": "zh", 
-  "appid": "test", 
-  "salt": "12345", 
-  "sign": "dummy"
-}

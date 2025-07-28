@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core.config import get_settings
 from .core.network import NetworkManager
-from .api.routes import translation, health, admin, discovery, optimized
+from .api.routes import translation, health, admin, discovery, optimized, chatbot
 
 # Mock logger
 class MockLogger:
@@ -49,8 +49,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Add trusted host middleware (more permissive for remote deployment)
-    if not settings.debug:
+    # Add trusted host middleware (disabled for ngrok compatibility)
+    # When using ngrok or similar tunneling services, we need to allow external hosts
+    # For production, this should be properly configured with specific allowed hosts
+    enable_host_checking = os.getenv("ENABLE_HOST_CHECKING", "false").lower() == "true"
+    
+    if not settings.debug and enable_host_checking:
         allowed_hosts = ["localhost", "127.0.0.1", settings.api.host]
         
         # Add additional trusted hosts for remote deployment
@@ -100,18 +104,41 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(admin.router, prefix="/api/admin")
     app.include_router(discovery.router)  # Discovery routes already have /api/discovery prefix
+    app.include_router(chatbot.router)  # Add chatbot routes with /api/chat prefix
     
-    # Mount static files for web interface
+    # Mount static files for web interface BEFORE other routes
     web_dir = Path(__file__).parent.parent / "web"
     if web_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(web_dir / "assets")), name="assets")
         app.mount("/web", StaticFiles(directory=str(web_dir), html=True), name="web")
+    
+    # Chat interface route
+    @app.get("/chat", response_class=HTMLResponse)
+    async def chat_interface():
+        web_dir = Path(__file__).parent.parent / "web"
+        chat_html = web_dir / "chat.html"
+        if chat_html.exists():
+            return HTMLResponse(content=chat_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <html><body>
+                <h1>Chat Interface Not Found</h1>
+                <p>The chat.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/api/chat/health">Check API Health</a></p>
+            </body></html>
+            """)
     
     # Serve optimized interface at root
     @app.get("/", response_class=HTMLResponse)
     async def root():
         web_dir = Path(__file__).parent.parent / "web"
+        chat_html = web_dir / "chat.html"
         optimized_html = web_dir / "optimized.html"
-        if optimized_html.exists():
+        
+        # Prefer chat interface over optimized interface
+        if chat_html.exists():
+            return HTMLResponse(content=chat_html.read_text(encoding='utf-8'))
+        elif optimized_html.exists():
             return HTMLResponse(content=optimized_html.read_text(encoding='utf-8'))
         else:
             # Fallback to service info if optimized.html doesn't exist
@@ -131,7 +158,10 @@ def create_app() -> FastAPI:
                     "demo_translate": "/api/demo/translate",
                     "optimized_translate": "/api/optimized/translate",
                     "performance_stats": "/api/optimized/stats",
-                    "benchmark": "/api/optimized/benchmark"
+                    "benchmark": "/api/optimized/benchmark",
+                    "chat_message": "/api/chat/message",
+                    "chat_conversations": "/api/chat/conversations",
+                    "chat_health": "/api/chat/health"
                 }
             }
     
@@ -154,7 +184,10 @@ def create_app() -> FastAPI:
                 "demo_translate": "/api/demo/translate",
                 "optimized_translate": "/api/optimized/translate",
                 "performance_stats": "/api/optimized/stats",
-                "benchmark": "/api/optimized/benchmark"
+                "benchmark": "/api/optimized/benchmark",
+                "chat_message": "/api/chat/message",
+                "chat_conversations": "/api/chat/conversations",
+                "chat_health": "/api/chat/health"
             }
         }
     
