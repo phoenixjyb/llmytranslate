@@ -5,12 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LLM Chatbot - Cross Platform</title>
     <link rel="stylesheet" href="assets/chat.css">
+    <link rel="stylesheet" href="assets/user-styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="chat-container">
+        <!-- User Info Section -->
+        <div id="user-info" class="user-info-section">
+            <!-- Will be populated by JavaScript -->
+        </div>
+        
         <div class="chat-header">
             <h1>🤖 LLM Translation & Chat Assistant</h1>
             <div class="platform-info">
@@ -114,6 +120,33 @@
         window.addEventListener('load', function() {
             checkConnection();
         });
+        
+        // Global function bindings for chat interface
+        function sendMessage() {
+            chatBot.sendMessage();
+        }
+        
+        function clearChat() {
+            chatBot.clearChat();
+        }
+        
+        function showConversations() {
+            chatBot.showConversations();
+        }
+        
+        function closeModal() {
+            chatBot.closeModal();
+        }
+        
+        function changeModel() {
+            chatBot.changeModel();
+        }
+        
+        function checkConnection() {
+            if (typeof chatBot !== 'undefined') {
+                chatBot.checkConnection();
+            }
+        }
     </script>
     <script src="assets/chat.js"></script>
 </body>

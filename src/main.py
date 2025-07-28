@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core.config import get_settings
 from .core.network import NetworkManager
-from .api.routes import translation, health, admin, discovery, optimized, chatbot
+from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management
 
 # Mock logger
 class MockLogger:
@@ -105,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router, prefix="/api/admin")
     app.include_router(discovery.router)  # Discovery routes already have /api/discovery prefix
     app.include_router(chatbot.router)  # Add chatbot routes with /api/chat prefix
+    app.include_router(user_management.router)  # Add user management routes
     
     # Mount static files for web interface BEFORE other routes
     web_dir = Path(__file__).parent.parent / "web"
@@ -127,6 +128,22 @@ def create_app() -> FastAPI:
                 <p><a href="/api/chat/health">Check API Health</a></p>
             </body></html>
             """)
+    
+    # Authentication interface route
+    @app.get("/auth.html", response_class=HTMLResponse)
+    async def auth_interface():
+        web_dir = Path(__file__).parent.parent / "web"
+        auth_html = web_dir / "auth.html"
+        if auth_html.exists():
+            return HTMLResponse(content=auth_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <html><body>
+                <h1>Authentication Interface Not Found</h1>
+                <p>The auth.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/chat">Go to Chat</a></p>
+            </body></html>
+            """, status_code=404)
     
     # Serve optimized interface at root
     @app.get("/", response_class=HTMLResponse)

@@ -1,8 +1,8 @@
 """
-Cross-platform chatbot API routes with comprehensive conversation management.
+Cross-platform chatbot API routes with user authentication and conversation management.
 Supports Windows, macOS, and Linux platforms with unified interface.
 """
-from fastapi import APIRouter, HTTPException, Depends, Query, Path
+from fastapi import APIRouter, HTTPException, Depends, Query, Path, Request
 from fastapi.responses import JSONResponse
 from typing import List, Optional, Dict, Any
 import logging
@@ -12,42 +12,168 @@ from ...models.chat_schemas import (
     ChatRequest, ChatResponse, ConversationHistory, 
     ChatbotHealthCheck, ConversationSummary
 )
+from ...models.user_models import SessionInfo
 from ...services.chatbot_service import chatbot_service
+from ...services.user_auth_service import user_auth_service
+from ...services.database_manager import db_manager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["Chatbot"])
 
+
+async def get_current_session(request: Request) -> Optional[SessionInfo]:
+    """Get current user session (authenticated or guest)."""
+    session_id = None
+    
+    # Try to get session from Authorization header
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        token_payload = user_auth_service._verify_token(token)
+        if token_payload and token_payload.get("type") == "access":
+            session_id = token_payload.get("session_id")
+    
+    # Try to get session from cookies
+    if not session_id:
+        session_id = request.cookies.get("session_id") or request.cookies.get("guest_session_id")
+    
+    # Try to get guest session from headers
+    if not session_id:
+        session_id = request.headers.get("X-Guest-Session-Id")
+    
+    if session_id:
+        return await user_auth_service.verify_session(session_id)
+    
+    return None
+
+
 @router.post("/message", response_model=ChatResponse)
-async def send_chat_message(request: ChatRequest):
+async def send_chat_message(
+    request: ChatRequest, 
+    http_request: Request,
+    current_session: Optional[SessionInfo] = Depends(get_current_session)
+):
     """
     Send a message to the chatbot and get AI response.
     
-    Cross-platform support for conversation management with:
-    - Windows: APPDATA storage integration
-    - macOS: Application Support storage
-    - Linux: XDG Base Directory compliance
+    Supports both authenticated users and guests with appropriate limitations.
+    Cross-platform support for conversation management.
     """
     try:
-        logger.info(f"Processing chat message from {request.platform}")
+        # Check if user has a valid session
+        if not current_session:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
+        # Check guest limitations
+        if current_session.is_guest:
+            # Get conversation message count for guests
+            messages = db_manager.get_conversation_messages(request.conversation_id)
+            if len(messages) >= 20:  # Guest limit
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Guest conversation limit reached. Please sign up for unlimited access."
+                )
+        
+        # Add user/session context to request (remove the problematic field assignments)
+        # request.user_id = current_session.user_id if not current_session.is_guest else None
+        # request.session_id = current_session.session_id
+        # request.is_guest = current_session.is_guest
+        
+        logger.info(f"Processing chat message from {request.platform} (user: {current_session.username})")
+        
+        # Process the message
         response = await chatbot_service.process_chat_message(request)
+        
+        # Store the conversation and messages in database with user/session context
+        if request.conversation_id:
+            conversation_id = request.conversation_id
+        else:
+            conversation_id = response.conversation_id
+            
+        # Create or update conversation in database
+        db_manager.create_conversation(
+            conversation_id=conversation_id,
+            user_id=current_session.user_id if not current_session.is_guest else None,
+            session_id=current_session.session_id,
+            title=f"Chat {conversation_id[:8]}",
+            model=request.model or "gemma3:latest",
+            platform=request.platform or "web"
+        )
+        
+        # Add user message to database
+        user_msg_id = f"{conversation_id}-user-{int(datetime.utcnow().timestamp())}"
+        db_manager.add_message(
+            conversation_id=conversation_id,
+            message_id=user_msg_id,
+            role="user",
+            content=request.message
+        )
+        
+        # Add assistant message to database
+        assistant_msg_id = f"{conversation_id}-assistant-{int(datetime.utcnow().timestamp())}"
+        db_manager.add_message(
+            conversation_id=conversation_id,
+            message_id=assistant_msg_id,
+            role="assistant",
+            content=response.response,
+            model_used=response.model_used,
+            processing_time_ms=response.processing_time_ms,
+            tokens_used=response.tokens_used
+        )
+        
+        # Log API usage
+        db_manager.log_api_usage(
+            user_id=current_session.user_id if not current_session.is_guest else None,
+            session_id=current_session.session_id,
+            endpoint="/api/chat/message",
+            method="POST",
+            status_code=200,
+            model_used=response.model_used,
+            is_guest=current_session.is_guest,
+            ip_address=http_request.client.host,
+            user_agent=http_request.headers.get("User-Agent")
+        )
+        
         return response
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to process chat message: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/conversations", response_model=List[Dict[str, Any]])
 async def list_conversations(
+    current_session: Optional[SessionInfo] = Depends(get_current_session),
     limit: int = Query(default=50, ge=1, le=200, description="Maximum number of conversations to return")
 ):
     """
-    List all conversations with metadata.
+    List conversations for the current user or guest session.
     
     Returns conversations sorted by last activity (most recent first).
-    Includes platform information for cross-platform debugging.
+    Authenticated users get persistent conversation history.
+    Guests get limited session-based conversations.
     """
     try:
-        conversations = await chatbot_service.list_conversations(limit=limit)
+        if not current_session:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
+        if current_session.is_guest:
+            # Get guest conversations for this session
+            conversations = db_manager.get_guest_conversations(current_session.session_id)
+        else:
+            # Get user conversations
+            conversations = db_manager.get_user_conversations(current_session.user_id, limit)
+        
+        logger.info(f"Retrieved {len(conversations)} conversations for {current_session.username}")
+        return conversations
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to retrieve conversations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
         return conversations
     except Exception as e:
         logger.error(f"Failed to list conversations: {e}")

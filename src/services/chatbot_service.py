@@ -263,52 +263,65 @@ class ChatbotService:
         return "\n".join(formatted_context)
     
     async def get_conversation_history(self, conversation_id: str) -> ConversationHistory:
-        """Get complete conversation history."""
+        """Get complete conversation history from database."""
         try:
-            messages_data = self.conversation_manager.get_conversation(conversation_id)
+            from ..services.database_manager import DatabaseManager
+            from ..models.chat_schemas import ConversationSummary
+            
+            db_manager = DatabaseManager()
+            
+            # Get messages from database
+            messages_data = db_manager.get_conversation_messages(conversation_id)
+            
+            if not messages_data:
+                raise Exception(f"Conversation {conversation_id} not found")
             
             # Convert to ChatMessage objects
             messages = []
             for msg_data in messages_data:
+                # Parse timestamp
+                timestamp_str = msg_data.get("timestamp")
+                if timestamp_str:
+                    try:
+                        # Handle different timestamp formats
+                        if "T" in timestamp_str:
+                            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                        else:
+                            timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")
+                    except (ValueError, TypeError):
+                        timestamp = datetime.utcnow()
+                else:
+                    timestamp = datetime.utcnow()
+                
                 message = ChatMessage(
-                    id=msg_data.get("id", ""),
+                    id=msg_data.get("message_id", ""),
                     role=msg_data.get("role", "user"),
                     content=msg_data.get("content", ""),
-                    timestamp=datetime.fromisoformat(msg_data.get("timestamp", datetime.utcnow().isoformat())),
+                    timestamp=timestamp,
                     metadata=msg_data.get("metadata", {})
                 )
                 messages.append(message)
             
-            # Get conversation metadata
-            conversations = self.conversation_manager.list_conversations()
-            conversation_summary = None
-            
-            for conv in conversations:
-                if conv["conversation_id"] == conversation_id:
-                    from ..models.chat_schemas import ConversationSummary
-                    conversation_summary = ConversationSummary(
-                        conversation_id=conv["conversation_id"],
-                        created_at=datetime.fromisoformat(conv["created_at"]),
-                        last_message_at=datetime.fromisoformat(conv["last_message_at"]),
-                        message_count=conv["message_count"],
-                        title=conv["title"],
-                        model_used=conv["model_used"],
-                        platform=conv["platform"]
-                    )
-                    break
-            
-            if not conversation_summary:
-                raise Exception(f"Conversation {conversation_id} not found")
+            # Create conversation summary
+            conversation_summary = ConversationSummary(
+                conversation_id=conversation_id,
+                created_at=messages[0].timestamp if messages else datetime.utcnow(),
+                last_message_at=messages[-1].timestamp if messages else datetime.utcnow(),
+                message_count=len(messages),
+                title=f"Conversation {conversation_id[:8]}",
+                model_used="gemma3:latest",
+                platform="web"
+            )
             
             return ConversationHistory(
                 conversation_id=conversation_id,
-                messages=messages,
-                summary=conversation_summary
+                summary=conversation_summary,
+                messages=messages
             )
             
         except Exception as e:
-            logger.error(f"Error getting conversation history: {e}")
-            raise Exception(f"Failed to get conversation history: {str(e)}")
+            logger.error(f"Failed to get conversation history for {conversation_id}: {e}")
+            raise Exception(f"Failed to get conversation history: {e}")
     
     async def list_conversations(self, limit: int = 50) -> List[Dict[str, Any]]:
         """List conversations with pagination."""

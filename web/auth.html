@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Account - LLM Translation & Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .auth-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            max-width: 900px;
+            width: 100%;
+            min-height: 600px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .auth-left {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .auth-left h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .auth-left p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .feature-list {
+            list-style: none;
+            text-align: left;
+        }
+
+        .feature-list li {
+            padding: 8px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .feature-list li::before {
+            content: "✓";
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            font-weight: bold;
+        }
+
+        .auth-right {
+            padding: 60px 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .auth-form {
+            max-width: 320px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .form-tabs {
+            display: flex;
+            margin-bottom: 40px;
+            border-bottom: 2px solid #f1f3f4;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 15px;
+            background: none;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-input.error {
+            border-color: #e53e3e;
+        }
+
+        .error-message {
+            color: #e53e3e;
+            font-size: 0.875rem;
+            margin-top: 5px;
+        }
+
+        .success-message {
+            color: #38a169;
+            font-size: 0.875rem;
+            margin-top: 5px;
+        }
+
+        .form-button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            margin-bottom: 20px;
+        }
+
+        .form-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .form-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .guest-access {
+            text-align: center;
+            padding: 20px 0;
+            border-top: 1px solid #e1e5e9;
+        }
+
+        .guest-button {
+            background: none;
+            border: 2px solid #667eea;
+            color: #667eea;
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .guest-button:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .password-strength {
+            margin-top: 5px;
+            height: 3px;
+            background: #e1e5e9;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .password-strength-bar {
+            height: 100%;
+            width: 0%;
+            transition: all 0.3s ease;
+        }
+
+        .strength-weak { background: #e53e3e; }
+        .strength-fair { background: #ffa500; }
+        .strength-good { background: #38a169; }
+        .strength-strong { background: #00c851; }
+
+        .form-checkbox {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .form-checkbox input {
+            margin-right: 10px;
+        }
+
+        .form-checkbox label {
+            margin: 0;
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .auth-container {
+                grid-template-columns: 1fr;
+                max-width: 400px;
+            }
+
+            .auth-left {
+                padding: 40px 20px;
+            }
+
+            .auth-left h1 {
+                font-size: 2rem;
+            }
+
+            .auth-right {
+                padding: 40px 20px;
+            }
+        }
+
+        /* Loading spinner */
+        .loading-spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-left">
+            <h1>Welcome</h1>
+            <p>Access our powerful AI translation and chat services with your personal account, or try as a guest.</p>
+            <ul class="feature-list">
+                <li>Unlimited conversations</li>
+                <li>Persistent chat history</li>
+                <li>Multiple AI models</li>
+                <li>Translation services</li>
+                <li>Personalized experience</li>
+                <li>Cross-platform sync</li>
+            </ul>
+        </div>
+
+        <div class="auth-right">
+            <div class="auth-form">
+                <!-- Form Tabs -->
+                <div class="form-tabs">
+                    <button type="button" class="tab-button active" data-tab="login">Login</button>
+                    <button type="button" class="tab-button" data-tab="register">Register</button>
+                </div>
+
+                <!-- Login Form -->
+                <form id="login-form" class="auth-form-content">
+                    <div class="form-group">
+                        <label for="login-email">Email or Username</label>
+                        <input type="text" id="login-email" class="form-input" placeholder="Enter your email or username" required>
+                        <div class="error-message" id="login-email-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" class="form-input" placeholder="Enter your password" required>
+                        <div class="error-message" id="login-password-error"></div>
+                    </div>
+
+                    <div class="form-checkbox">
+                        <input type="checkbox" id="remember-me">
+                        <label for="remember-me">Remember me</label>
+                    </div>
+
+                    <button type="submit" class="form-button" id="login-button">
+                        <span id="login-text">Login</span>
+                        <span id="login-loading" class="hidden"><span class="loading-spinner"></span>Logging in...</span>
+                    </button>
+
+                    <div class="guest-access">
+                        <p style="margin-bottom: 15px; color: #666;">Don't want to create an account?</p>
+                        <button type="button" class="guest-button" id="guest-access-button">Continue as Guest</button>
+                    </div>
+                </form>
+
+                <!-- Register Form -->
+                <form id="register-form" class="auth-form-content hidden">
+                    <div class="form-group">
+                        <label for="register-username">Username</label>
+                        <input type="text" id="register-username" class="form-input" placeholder="Choose a username" required>
+                        <div class="error-message" id="register-username-error"></div>
+                        <div class="success-message" id="register-username-success"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-email">Email</label>
+                        <input type="email" id="register-email" class="form-input" placeholder="Enter your email" required>
+                        <div class="error-message" id="register-email-error"></div>
+                        <div class="success-message" id="register-email-success"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-password">Password</label>
+                        <input type="password" id="register-password" class="form-input" placeholder="Create a password" required>
+                        <div class="password-strength">
+                            <div class="password-strength-bar" id="password-strength-bar"></div>
+                        </div>
+                        <div class="error-message" id="register-password-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-first-name">First Name (Optional)</label>
+                        <input type="text" id="register-first-name" class="form-input" placeholder="Your first name">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-last-name">Last Name (Optional)</label>
+                        <input type="text" id="register-last-name" class="form-input" placeholder="Your last name">
+                    </div>
+
+                    <button type="submit" class="form-button" id="register-button">
+                        <span id="register-text">Create Account</span>
+                        <span id="register-loading" class="hidden"><span class="loading-spinner"></span>Creating account...</span>
+                    </button>
+
+                    <div class="guest-access">
+                        <p style="margin-bottom: 15px; color: #666;">Not ready to register?</p>
+                        <button type="button" class="guest-button" id="guest-access-button-2">Try as Guest</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/user-auth.js"></script>
+</body>
+</html>
