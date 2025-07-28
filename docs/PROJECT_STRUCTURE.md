@@ -293,10 +293,24 @@ python -m pytest tests/
 # Setup environment
 .\scripts\setup.ps1
 
-# Start service
+# Start service (normal mode)
 .\scripts\start-service.ps1
 # or
 .\start-service.ps1
+
+# Start service with Tailscale VPN access
+.\scripts\start-service.ps1 -WithTailscale
+# or
+.\start-service.ps1 -WithTailscale
+
+# Start service with Ngrok tunnel
+.\scripts\start-service.ps1 -WithNgrok
+
+# Start service in production mode
+.\scripts\start-service.ps1 -Production
+
+# Start service with debug output
+.\scripts\start-service.ps1 -Debug
 
 # Stop service
 .\scripts\stop-service.ps1
@@ -328,6 +342,41 @@ python -m pytest tests/
 
 # Setup Ngrok tunnel
 .\scripts\setup-ngrok.ps1
+```
+
+### Unix/Linux Scripts
+```bash
+# Start service with Tailscale
+./scripts/start-service.sh --with-tailscale
+
+# Start service with Ngrok
+./scripts/start-service.sh --with-ngrok
+
+# Start in production mode
+./scripts/start-service.sh --production
+
+# Start with debug output
+./scripts/start-service.sh --debug
+```
+
+### Tailscale VPN Access
+```powershell
+# Prerequisites: Install and setup Tailscale
+# 1. Download Tailscale from https://tailscale.com/download
+# 2. Install and authenticate: tailscale up
+
+# Start service with Tailscale access
+.\scripts\start-service.ps1 -WithTailscale
+
+# Or use the Unix version
+./scripts/start-service.sh --with-tailscale
+
+# What happens:
+# - Checks if Tailscale is installed and running
+# - Gets your Tailscale IP address
+# - Copies .env.tailscale to .env for configuration
+# - Starts service accessible via Tailscale network
+# - Shows Tailscale IP and service URLs
 ```
 
 ### Git Workflow
