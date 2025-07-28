@@ -9,6 +9,7 @@ PRODUCTION=false
 DEBUG=false
 FORCE=false
 WITH_NGROK=false
+WITH_TAILSCALE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -28,9 +29,13 @@ while [[ $# -gt 0 ]]; do
             WITH_NGROK=true
             shift
             ;;
+        --with-tailscale)
+            WITH_TAILSCALE=true
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--production] [--debug] [--force] [--with-ngrok]"
+            echo "Usage: $0 [--production] [--debug] [--force] [--with-ngrok] [--with-tailscale]"
             exit 1
             ;;
     esac
@@ -255,6 +260,37 @@ function show_service_info() {
             else
                 print_error "Ngrok not found. Please install ngrok first."
                 print_warning "Download from: https://ngrok.com/download"
+            fi
+        fi
+        
+        # Start Tailscale configuration if requested
+        if [[ "$WITH_TAILSCALE" == "true" ]]; then
+            print_info "Configuring Tailscale access..."
+            if command -v tailscale &> /dev/null; then
+                # Check if Tailscale is running
+                if tailscale status &> /dev/null; then
+                    TAILSCALE_IP=$(tailscale ip -4 2>/dev/null)
+                    if [[ -n "$TAILSCALE_IP" ]]; then
+                        print_success "Tailscale IP: $TAILSCALE_IP"
+                        print_success "Service URL: http://$TAILSCALE_IP:8000"
+                        print_success "API Docs: http://$TAILSCALE_IP:8000/docs"
+                        
+                        # Set up Tailscale environment if available
+                        if [[ -f ".env.tailscale" ]]; then
+                            print_info "Using Tailscale environment configuration"
+                            cp .env.tailscale .env
+                        fi
+                    else
+                        print_warning "Unable to get Tailscale IP. Service will start normally."
+                    fi
+                else
+                    print_warning "Tailscale is not running. Please run 'tailscale up' first."
+                    print_warning "Service will start normally on localhost."
+                fi
+            else
+                print_error "Tailscale not found. Please install Tailscale first."
+                print_warning "Download from: https://tailscale.com/download"
+                print_warning "Service will start normally on localhost."
             fi
         fi
         

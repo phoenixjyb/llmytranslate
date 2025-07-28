@@ -7,7 +7,8 @@ param(
     [switch]$Production,
     [switch]$Debug,
     [switch]$Force,
-    [switch]$WithNgrok
+    [switch]$WithNgrok,
+    [switch]$WithTailscale
 )
 
 # Platform detection with better Windows version
@@ -283,6 +284,49 @@ try {
                 }
             } catch {
                 Write-Host "❌ Failed to start ngrok: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+        
+        # Start Tailscale configuration if requested
+        if ($WithTailscale) {
+            Write-Host "`n🔗 Configuring Tailscale access..." -ForegroundColor Cyan
+            try {
+                # Check if Tailscale is available
+                $tailscalePath = Get-Command "tailscale" -ErrorAction SilentlyContinue
+                if ($tailscalePath) {
+                    # Check if Tailscale is running
+                    try {
+                        $tailscaleStatus = & tailscale status 2>$null
+                        if ($LASTEXITCODE -eq 0) {
+                            # Get Tailscale IP
+                            $tailscaleIP = & tailscale ip -4 2>$null
+                            if ($tailscaleIP -and $LASTEXITCODE -eq 0) {
+                                Write-Host "🌐 Tailscale IP: $tailscaleIP" -ForegroundColor Green
+                                Write-Host "🌐 Service URL: http://$tailscaleIP:8000" -ForegroundColor Green
+                                Write-Host "📚 API Docs: http://$tailscaleIP:8000/docs" -ForegroundColor Green
+                                
+                                # Set up Tailscale environment if available
+                                if (Test-Path ".env.tailscale") {
+                                    Write-Host "🔧 Using Tailscale environment configuration" -ForegroundColor Cyan
+                                    Copy-Item ".env.tailscale" ".env" -Force
+                                }
+                            } else {
+                                Write-Host "⚠️  Unable to get Tailscale IP. Service will start normally." -ForegroundColor Yellow
+                            }
+                        } else {
+                            Write-Host "⚠️  Tailscale is not running. Please run 'tailscale up' first." -ForegroundColor Yellow
+                            Write-Host "   Service will start normally on localhost." -ForegroundColor Yellow
+                        }
+                    } catch {
+                        Write-Host "⚠️  Tailscale status check failed. Service will start normally." -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "❌ Tailscale not found. Please install Tailscale first." -ForegroundColor Red
+                    Write-Host "   Download from: https://tailscale.com/download" -ForegroundColor Yellow
+                    Write-Host "   Service will start normally on localhost." -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "❌ Failed to configure Tailscale: $($_.Exception.Message)" -ForegroundColor Red
             }
         }
         
