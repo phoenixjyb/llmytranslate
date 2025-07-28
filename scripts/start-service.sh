@@ -77,8 +77,11 @@ function resolve_environment_conflicts() {
     conflict_patterns=("OLLAMA" "REDIS" "DATABASE" "AUTH" "API")
     
     for pattern in "${conflict_patterns[@]}"; do
-        # Check for exact matches and variations
-        for var in $(printenv | grep -E "^${pattern}[=]|^${pattern,,}[=]|^${pattern^^}[=]" | cut -d'=' -f1); do
+        # Check for exact matches and variations (using portable approach)
+        pattern_lower=$(echo "$pattern" | tr '[:upper:]' '[:lower:]')
+        pattern_upper=$(echo "$pattern" | tr '[:lower:]' '[:upper:]')
+        
+        for var in $(printenv | grep -E "^${pattern}[=]|^${pattern_lower}[=]|^${pattern_upper}[=]" | cut -d'=' -f1); do
             print_warning "Temporarily removing: $var"
             unset "$var"
         done
