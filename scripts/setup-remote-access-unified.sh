@@ -107,11 +107,11 @@ setup_tailscale() {
     print_info "Setting up Tailscale VPN access..."
     
     # Use the dedicated Tailscale script
-    if [[ -f "scripts/setup_tailscale.sh" ]]; then
-        chmod +x scripts/setup_tailscale.sh
-        ./scripts/setup_tailscale.sh --port "$PORT"
+    if [[ -f "scripts/setup-tailscale.sh" ]]; then
+        chmod +x scripts/setup-tailscale.sh
+        ./scripts/setup-tailscale.sh --port "$PORT"
     else
-        print_error "Tailscale setup script not found at scripts/setup_tailscale.sh"
+        print_error "Tailscale setup script not found at scripts/setup-tailscale.sh"
         exit 1
     fi
 }
