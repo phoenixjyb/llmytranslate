@@ -52,12 +52,47 @@ class ChatBot {
                     await this.loadGuestInfo();
                 }
             } else {
-                // No authentication, redirect to auth page
-                this.redirectToAuth();
+                // No authentication, try to create guest session
+                await this.createGuestSession();
             }
         } catch (error) {
             console.error('Authentication check failed:', error);
-            this.redirectToAuth();
+            // Try to create guest session instead of redirecting
+            await this.createGuestSession();
+        }
+    }
+
+    async createGuestSession() {
+        try {
+            console.log('Creating guest session...');
+            const response = await fetch('/api/users/guest-session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const guestSession = await response.json();
+                console.log('Guest session created:', guestSession);
+                // Store guest session ID
+                localStorage.setItem('guest_session_id', guestSession.session_id);
+                this.sessionId = guestSession.session_id;
+                this.isGuest = true;
+                this.currentUser = null;
+                
+                // Update UI and load guest info
+                this.updateUserInterface();
+                await this.loadGuestInfo();
+                
+                console.log('Guest session created successfully:', guestSession.session_id);
+            } else {
+                console.error('Failed to create guest session:', response.status, response.statusText);
+                this.showConnectionError('Unable to create session. Please try again.');
+            }
+        } catch (error) {
+            console.error('Guest session creation failed:', error);
+            this.showConnectionError('Connection failed. Please check your network and try again.');
         }
     }
 
@@ -88,15 +123,22 @@ class ChatBot {
         };
 
         const token = localStorage.getItem('auth_token');
+        const guestSessionId = localStorage.getItem('guest_session_id');
+        
+        console.log('Auth headers debug:', {
+            token: token ? 'present' : 'missing',
+            guestSessionId: guestSessionId ? guestSessionId : 'missing'
+        });
+
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const guestSessionId = localStorage.getItem('guest_session_id');
         if (guestSessionId && !token) {
             headers['X-Guest-Session-Id'] = guestSessionId;
         }
 
+        console.log('Final headers:', headers);
         return headers;
     }
 
@@ -218,6 +260,27 @@ class ChatBot {
         upgradeModals.forEach(modal => modal.remove());
     }
 
+    showConnectionError(message) {
+        const statusElement = document.getElementById('connection-status');
+        if (statusElement) {
+            statusElement.className = 'status-error';
+            statusElement.textContent = message;
+        }
+        
+        // Also show an error message in the chat
+        const messagesContainer = document.getElementById('chat-messages');
+        if (messagesContainer) {
+            const errorMessage = document.createElement('div');
+            errorMessage.className = 'message bot-message error-message';
+            errorMessage.innerHTML = `
+                <div class="message-content">
+                    <strong>Error:</strong> ${message}
+                </div>
+            `;
+            messagesContainer.appendChild(errorMessage);
+        }
+    }
+
     async checkConnection() {
         try {
             const response = await fetch('/api/chat/health', {
@@ -321,24 +384,46 @@ class ChatBot {
         sendButton.querySelector('.send-loading').style.display = 'inline';
         
         try {
+            console.log('Sending message:', message);
+            console.log('Conversation ID:', this.conversationId);
+            console.log('Model:', this.currentModel);
+            
+            const requestBody = {
+                message: message,
+                conversation_id: this.conversationId,
+                model: this.currentModel
+            };
+            console.log('Request body:', requestBody);
+            
+            const headers = this.getAuthHeaders();
+            console.log('Request headers:', headers);
+            
             const response = await fetch('/api/chat/message', {
                 method: 'POST',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({
-                    message: message,
-                    conversation_id: this.conversationId,
-                    model: this.currentModel
-                })
+                headers: headers,
+                body: JSON.stringify(requestBody)
             });
             
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Error response body:', errorText);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
+            console.log('Response data:', data);
             
             if (data.response) {
                 this.addMessage(data.response, false);
+                
+                // Process session information if provided
+                if (data.session_info) {
+                    console.log('Received session info:', data.session_info);
+                    this.updateSessionInfo(data.session_info);
+                }
                 
                 // Update guest message count for bot response
                 if (this.isGuest) {
@@ -356,7 +441,8 @@ class ChatBot {
             }
             
         } catch (error) {
-            console.error('Chat error:', error);
+            console.error('Chat error details:', error);
+            console.error('Error stack:', error.stack);
             this.addMessage(`⚠️ Error: ${error.message}. Please try again or check your connection.`, false);
             this.isConnected = false;
             this.updateConnectionStatus();
@@ -366,6 +452,39 @@ class ChatBot {
             sendButton.querySelector('.send-text').style.display = 'inline';
             sendButton.querySelector('.send-loading').style.display = 'none';
             messageInput.focus();
+        }
+    }
+
+    updateSessionInfo(sessionInfo) {
+        console.log('Updating session info:', sessionInfo);
+        
+        if (sessionInfo.is_guest) {
+            // Update guest session state
+            this.isGuest = true;
+            this.sessionId = sessionInfo.session_id;
+            this.guestLimits.maxMessagesPerConversation = sessionInfo.max_messages_per_conversation || 20;
+            this.guestLimits.currentConversationMessages = sessionInfo.current_conversation_messages || 0;
+            
+            // Store session ID in localStorage
+            localStorage.setItem('guest_session_id', sessionInfo.session_id);
+            
+            // Update UI to show guest status
+            this.updateUserInterface();
+            this.updateGuestLimitDisplay();
+            
+            console.log('Updated to guest session:', sessionInfo.session_id);
+        } else {
+            // Update user session state
+            this.isGuest = false;
+            this.currentUser = {
+                username: sessionInfo.username,
+                user_id: sessionInfo.user_id
+            };
+            
+            // Update UI to show user status
+            this.updateUserInterface();
+            
+            console.log('Updated to user session:', sessionInfo.username);
         }
     }
 
@@ -618,6 +737,19 @@ function showConversations() {
 
 function closeModal() {
     chatBot.closeModal();
+}
+
+// Function to return to main page
+function returnToMain() {
+    console.log('returnToMain() function called');
+    try {
+        console.log('Attempting to navigate to: /');
+        window.location.href = '/';
+        console.log('Navigation command sent');
+    } catch (error) {
+        console.error('Error during navigation:', error);
+        alert('Navigation error: ' + error.message);
+    }
 }
 
 // Initialize chatbot when page loads

@@ -3,51 +3,243 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌐 LLM Translation Service</title>
+    <title>LLMy Services - Choose Your Service</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
-            justify-content: center;
             align-items: center;
-            padding: 20px;
+            justify-content: center;
+            color: #333;
         }
-        
+
         .container {
+            max-width: 800px;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 50px;
+            line-height: 1.6;
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .service-card {
             background: white;
             border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            max-width: 800px;
-            width: 100%;
-            animation: fadeIn 0.8s ease-out;
+            padding: 40px 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
         }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
+
+        .service-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
         }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
+
+        .service-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        
-        .header h1 {
+
+        .chatbot-icon {
+            color: #4CAF50;
+        }
+
+        .translate-icon {
+            color: #FF9800;
+        }
+
+        .service-title {
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin-bottom: 15px;
             color: #333;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
         }
-        
-        .status-indicator {
+
+        .service-description {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #666;
+            margin-bottom: 25px;
+        }
+
+        .service-features {
+            list-style: none;
+            text-align: left;
+            margin-bottom: 25px;
+        }
+
+        .service-features li {
+            padding: 5px 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .service-features li:before {
+            content: "✓ ";
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .service-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .service-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .footer {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            margin-top: 40px;
+        }
+
+        .footer a {
+            color: rgba(255, 255, 255, 0.9);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .logo {
+                font-size: 2.5rem;
+            }
+            
+            .services-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .service-card {
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">LLMy Services</div>
+        <div class="subtitle">
+            Welcome to our AI-powered services platform.<br>
+            Choose the service that best fits your needs.
+        </div>
+
+        <div class="services-grid">
+            <!-- Chatbot Service -->
+            <a href="/chat" class="service-card">
+                <div class="service-icon chatbot-icon">💬</div>
+                <div class="service-title">AI Chatbot</div>
+                <div class="service-description">
+                    Engage in intelligent conversations with our AI-powered chatbot using advanced language models.
+                </div>
+                <ul class="service-features">
+                    <li>Natural language conversations</li>
+                    <li>Context-aware responses</li>
+                    <li>Guest and registered user modes</li>
+                    <li>Conversation history</li>
+                    <li>Multiple AI models support</li>
+                </ul>
+                <button class="service-button">Start Chatting</button>
+            </a>
+
+            <!-- Translation Service -->
+            <a href="/translate" class="service-card">
+                <div class="service-icon translate-icon">🌐</div>
+                <div class="service-title">Translation Service</div>
+                <div class="service-description">
+                    Professional translation services with API access for developers and businesses.
+                </div>
+                <ul class="service-features">
+                    <li>Multiple language support</li>
+                    <li>RESTful API interface</li>
+                    <li>High-quality translations</li>
+                    <li>API key authentication</li>
+                    <li>Rate limiting and quotas</li>
+                </ul>
+                <button class="service-button">Try Translation</button>
+            </a>
+        </div>
+
+        <div class="footer">
+            <p>Powered by advanced AI technology | <a href="/api/docs">API Documentation</a> | <a href="/admin/stats">Admin Panel</a></p>
+        </div>
+    </div>
+
+    <script>
+        // Add click handlers for service cards
+        document.querySelectorAll('.service-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                // Prevent default if clicking on the card itself
+                if (e.target === this || e.target.classList.contains('service-button')) {
+                    window.location.href = this.href;
+                }
+            });
+        });
+
+        // Add some interactive effects
+        document.querySelectorAll('.service-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.background = 'linear-gradient(135deg, #f8f9ff 0%, #fff 100%)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.background = 'white';
+            });
+        });
+    </script>
+</body>
+</html>
             display: inline-block;
             padding: 8px 16px;
             border-radius: 20px;

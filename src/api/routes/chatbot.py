@@ -61,9 +61,18 @@ async def send_chat_message(
     Cross-platform support for conversation management.
     """
     try:
-        # Check if user has a valid session
+        # If no session, try to create a guest session automatically
         if not current_session:
-            raise HTTPException(status_code=401, detail="Authentication required")
+            try:
+                # Auto-create guest session
+                ip_address = http_request.client.host
+                user_agent = http_request.headers.get("user-agent", "Unknown")
+                guest_session = await user_auth_service.create_guest_session(ip_address, user_agent)
+                current_session = await user_auth_service.verify_session(guest_session.session_id)
+                logger.info(f"Auto-created guest session for chat: {guest_session.session_id}")
+            except Exception as e:
+                logger.error(f"Failed to auto-create guest session: {e}")
+                raise HTTPException(status_code=401, detail="Authentication required")
         
         # Check guest limitations
         if current_session.is_guest:
@@ -135,6 +144,24 @@ async def send_chat_message(
             user_agent=http_request.headers.get("User-Agent")
         )
         
+        # Add session information to response
+        if current_session.is_guest:
+            # Get current message count for this conversation
+            messages = db_manager.get_conversation_messages(response.conversation_id)
+            response.session_info = {
+                "is_guest": True,
+                "session_id": current_session.session_id,
+                "max_messages_per_conversation": 20,
+                "current_conversation_messages": len(messages),
+                "remaining_messages": max(0, 20 - len(messages))
+            }
+        else:
+            response.session_info = {
+                "is_guest": False,
+                "username": current_session.username,
+                "user_id": current_session.user_id
+            }
+        
         return response
         
     except HTTPException:
@@ -145,6 +172,7 @@ async def send_chat_message(
 
 @router.get("/conversations", response_model=List[Dict[str, Any]])
 async def list_conversations(
+    http_request: Request,
     current_session: Optional[SessionInfo] = Depends(get_current_session),
     limit: int = Query(default=50, ge=1, le=200, description="Maximum number of conversations to return")
 ):
@@ -156,8 +184,18 @@ async def list_conversations(
     Guests get limited session-based conversations.
     """
     try:
+        # If no session, try to create a guest session automatically
         if not current_session:
-            raise HTTPException(status_code=401, detail="Authentication required")
+            try:
+                # Auto-create guest session
+                ip_address = http_request.client.host
+                user_agent = http_request.headers.get("user-agent", "Unknown")
+                guest_session = await user_auth_service.create_guest_session(ip_address, user_agent)
+                current_session = await user_auth_service.verify_session(guest_session.session_id)
+                logger.info(f"Auto-created guest session for conversations: {guest_session.session_id}")
+            except Exception as e:
+                logger.error(f"Failed to auto-create guest session: {e}")
+                raise HTTPException(status_code=401, detail="Authentication required")
         
         if current_session.is_guest:
             # Get guest conversations for this session

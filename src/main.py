@@ -144,6 +144,22 @@ def create_app() -> FastAPI:
                 <p><a href="/chat">Go to Chat</a></p>
             </body></html>
             """, status_code=404)
+
+    # Translation service interface route
+    @app.get("/translate", response_class=HTMLResponse)
+    async def translate_interface():
+        web_dir = Path(__file__).parent.parent / "web"
+        translate_html = web_dir / "translate.html"
+        if translate_html.exists():
+            return HTMLResponse(content=translate_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <html><body>
+                <h1>Translation Interface Not Found</h1>
+                <p>The translate.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/">Go to Home</a> | <a href="/api/docs">API Documentation</a></p>
+            </body></html>
+            """, status_code=404)
     
     # Authentication interface route (without .html extension)
     @app.get("/auth", response_class=HTMLResponse)
@@ -161,20 +177,17 @@ def create_app() -> FastAPI:
             </body></html>
             """, status_code=404)
     
-    # Serve optimized interface at root
+    # Serve entrance page at root
     @app.get("/", response_class=HTMLResponse)
     async def root():
         web_dir = Path(__file__).parent.parent / "web"
-        chat_html = web_dir / "chat.html"
-        optimized_html = web_dir / "optimized.html"
+        index_html = web_dir / "index.html"
         
-        # Prefer chat interface over optimized interface
-        if chat_html.exists():
-            return HTMLResponse(content=chat_html.read_text(encoding='utf-8'))
-        elif optimized_html.exists():
-            return HTMLResponse(content=optimized_html.read_text(encoding='utf-8'))
+        # Serve the new entrance page
+        if index_html.exists():
+            return HTMLResponse(content=index_html.read_text(encoding='utf-8'))
         else:
-            # Fallback to service info if optimized.html doesn't exist
+            # Fallback to service info if index.html doesn't exist
             service_info = network_manager.get_service_info()
             return {
                 "name": settings.api.title,
