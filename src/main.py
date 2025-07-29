@@ -5,7 +5,7 @@ FastAPI application setup and configuration.
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import time
 import os
@@ -36,8 +36,8 @@ def create_app() -> FastAPI:
         description=settings.api.description,
         version=settings.api.version,
         debug=settings.debug,
-        docs_url="/docs" if settings.debug else None,
-        redoc_url="/redoc" if settings.debug else None,
+        docs_url=None,  # Disable default docs, we'll handle it ourselves
+        redoc_url=None,  # Disable default redoc, we'll handle it ourselves
     )
     
     # Add CORS middleware
@@ -160,6 +160,22 @@ def create_app() -> FastAPI:
                 <p><a href="/">Go to Home</a> | <a href="/api/docs">API Documentation</a></p>
             </body></html>
             """, status_code=404)
+
+    # Translation UI interface route
+    @app.get("/translate-ui", response_class=HTMLResponse)
+    async def translate_ui_interface():
+        web_dir = Path(__file__).parent.parent / "web"
+        translate_ui_html = web_dir / "translate-ui.html"
+        if translate_ui_html.exists():
+            return HTMLResponse(content=translate_ui_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <html><body>
+                <h1>Translation UI Not Found</h1>
+                <p>The translate-ui.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/">Go to Home</a> | <a href="/api/docs">API Documentation</a></p>
+            </body></html>
+            """, status_code=404)
     
     # Authentication interface route (without .html extension)
     @app.get("/auth", response_class=HTMLResponse)
@@ -210,7 +226,34 @@ def create_app() -> FastAPI:
                     "chat_health": "/api/chat/health"
                 }
             }
+
+    # API docs redirect route
+    @app.get("/api/docs")
+    async def api_docs_redirect():
+        # Always redirect to docs, regardless of debug mode
+        return RedirectResponse(url="/docs", status_code=302)
     
+    # Enable docs endpoint regardless of debug mode for API access
+    @app.get("/docs", response_class=HTMLResponse)
+    async def custom_docs():
+        from fastapi.openapi.docs import get_swagger_ui_html
+        return get_swagger_ui_html(
+            openapi_url="/openapi.json",
+            title=f"{settings.api.title} - API Documentation",
+            swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui-bundle.js",
+            swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui.css",
+        )
+
+    # Enable redoc endpoint regardless of debug mode for API access
+    @app.get("/redoc", response_class=HTMLResponse)
+    async def custom_redoc():
+        from fastapi.openapi.docs import get_redoc_html
+        return get_redoc_html(
+            openapi_url="/openapi.json",
+            title=f"{settings.api.title} - API Documentation (ReDoc)",
+            redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@2.1.3/bundles/redoc.standalone.js",
+        )
+
     # Service info endpoint for programmatic access
     @app.get("/api/info")
     async def service_info():
