@@ -8,6 +8,7 @@ import hashlib
 import time
 from typing import Optional, Dict, Any
 import httpx
+import requests  # Add requests as fallback for health checks
 from structlog import get_logger
 
 from ..core.config import get_settings
@@ -42,30 +43,97 @@ class OllamaClient:
             await self.client.aclose()
     
     async def health_check(self) -> Dict[str, Any]:
-        """Check Ollama service health."""
+        """Check Ollama service health using requests library."""
         try:
-            # Create a temporary client for health check
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(5.0)
-            ) as client:
-                response = await client.get(f"{self.base_url}/api/tags")
-                if response.status_code == 200:
-                    models = response.json().get("models", [])
-                    return {
-                        "status": "healthy",
-                        "models": [model.get("name") for model in models],
-                        "active_model": self.model_name
-                    }
-                else:
-                    return {
-                        "status": "unhealthy",
-                        "error": f"HTTP {response.status_code}"
-                    }
+            # Use requests instead of httpx due to compatibility issues
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5.0)
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                return {
+                    "status": "healthy",
+                    "models": [model.get("name") for model in models],
+                    "active_model": self.model_name
+                }
+            else:
+                return {
+                    "status": "unhealthy",
+                    "error": f"HTTP {response.status_code}"
+                }
         except Exception as e:
             logger.error("Ollama health check failed", error=str(e))
             return {
                 "status": "unhealthy",
                 "error": str(e)
+            }
+    
+    async def list_models(self) -> Dict[str, Any]:
+        """List available models from Ollama using requests library."""
+        try:
+            # Use requests instead of httpx due to compatibility issues
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5.0)
+            if response.status_code == 200:
+                data = response.json()
+                models = data.get("models", [])
+                return {
+                    "success": True,
+                    "models": models,
+                    "count": len(models)
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}",
+                    "models": []
+                }
+        except Exception as e:
+            logger.error("Ollama list models failed", error=str(e))
+            return {
+                "success": False,
+                "error": str(e),
+                "models": []
+            }
+    
+    async def chat_completion(
+        self,
+        message: str,
+        model: str = None,
+        stream: bool = False,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Chat completion wrapper around the generate method for voice chat compatibility.
+        """
+        try:
+            if model is None:
+                model = self.model_name
+                
+            response = await self.generate(
+                model=model,
+                prompt=message,
+                options=kwargs.get("options", {}),
+                stream=stream
+            )
+            
+            if response and "response" in response:
+                return {
+                    "success": True,
+                    "response": response["response"],
+                    "model": model,
+                    "processing_time": response.get("total_duration", 0) / 1_000_000_000 if response.get("total_duration") else 0
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "No response from Ollama",
+                    "response": ""
+                }
+                
+        except Exception as e:
+            logger.error(f"Chat completion failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "response": ""
             }
     
     async def generate_translation(

@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Chat - LLMy Services</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .return-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .return-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .voice-chat-panel {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .voice-chat-title {
+            font-size: 2.5rem;
+            color: #9C27B0;
+            margin-bottom: 20px;
+        }
+
+        .voice-chat-subtitle {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 40px;
+        }
+
+        .microphone-container {
+            margin: 40px 0;
+        }
+
+        .microphone-button {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #9C27B0 0%, #E91E63 100%);
+            color: white;
+            font-size: 4rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(156, 39, 176, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .microphone-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(156, 39, 176, 0.4);
+        }
+
+        .microphone-button.recording {
+            animation: pulse 1.5s infinite;
+            background: linear-gradient(135deg, #f44336 0%, #ff5722 100%);
+        }
+
+        .microphone-button.processing {
+            background: linear-gradient(135deg, #ff9800 0%, #ffeb3b 100%);
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-display {
+            margin: 30px 0;
+            padding: 20px;
+            border-radius: 15px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .status-ready {
+            background: #E8F5E8;
+            color: #2E7D32;
+            border: 2px solid #4CAF50;
+        }
+
+        .status-listening {
+            background: #FFF3E0;
+            color: #E65100;
+            border: 2px solid #FF9800;
+        }
+
+        .status-processing {
+            background: #F3E5F5;
+            color: #6A1B9A;
+            border: 2px solid #9C27B0;
+        }
+
+        .status-error {
+            background: #FFEBEE;
+            color: #C62828;
+            border: 2px solid #F44336;
+        }
+
+        .conversation-history {
+            margin-top: 40px;
+            text-align: left;
+        }
+
+        .conversation-title {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .conversation-item {
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 10px;
+            position: relative;
+        }
+
+        .user-message {
+            background: #E3F2FD;
+            border-left: 4px solid #2196F3;
+        }
+
+        .ai-message {
+            background: #F3E5F5;
+            border-left: 4px solid #9C27B0;
+        }
+
+        .message-role {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .message-text {
+            margin-bottom: 10px;
+        }
+
+        .message-audio {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .audio-player {
+            flex: 1;
+        }
+
+        .controls-panel {
+            margin: 30px 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .control-group {
+            text-align: left;
+        }
+
+        .control-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .control-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #E0E0E0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .control-input:focus {
+            outline: none;
+            border-color: #9C27B0;
+        }
+
+        .help-section {
+            margin-top: 40px;
+            padding: 20px;
+            background: #F5F5F5;
+            border-radius: 10px;
+            text-align: left;
+        }
+
+        .help-title {
+            font-size: 1.3rem;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .help-list {
+            list-style-position: inside;
+            color: #666;
+        }
+
+        .help-list li {
+            margin: 8px 0;
+        }
+
+        .browser-warning {
+            background: #FFF3CD;
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid #FFEAA7;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 15px;
+            }
+            
+            .voice-chat-panel {
+                padding: 30px 20px;
+            }
+            
+            .microphone-button {
+                width: 120px;
+                height: 120px;
+                font-size: 3rem;
+            }
+            
+            .controls-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">🎙️ Voice Chat</div>
+            <button onclick="returnToMain()" class="return-btn" title="Return to Main Page">
+                ← Back to Services
+            </button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="voice-chat-panel">
+            <h1 class="voice-chat-title">AI Voice Chat</h1>
+            <p class="voice-chat-subtitle">Speak naturally with AI - your voice conversations made easy</p>
+            
+            <div class="browser-warning" id="browserWarning" style="display: none;">
+                ⚠️ Your browser may not support voice recognition. For best experience, use Chrome, Edge, or Safari.
+            </div>
+
+            <div class="microphone-container">
+                <button class="microphone-button" id="micButton" onclick="toggleVoiceChat()">
+                    🎤
+                </button>
+            </div>
+
+            <div class="status-display status-ready" id="statusDisplay">
+                🎤 Click the microphone to start voice chat
+            </div>
+
+            <div class="controls-panel">
+                <div class="control-group">
+                    <label class="control-label" for="languageSelect">Language:</label>
+                    <select class="control-input" id="languageSelect">
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="voiceSpeed">Voice Speed:</label>
+                    <input type="range" class="control-input" id="voiceSpeed" min="0.5" max="2.0" step="0.1" value="1.0">
+                    <small>Current: <span id="speedValue">1.0</span>x</small>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="modelSelect">AI Model:</label>
+                    <select class="control-input" id="modelSelect">
+                        <option value="llama3.2">Llama 3.2</option>
+                        <option value="llama3.1">Llama 3.1</option>
+                        <option value="qwen2.5">Qwen 2.5</option>
+                        <option value="gemma2">Gemma 2</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="conversation-history" id="conversationHistory">
+                <h3 class="conversation-title">Conversation History</h3>
+                <div id="conversationList">
+                    <!-- Conversation items will be added here -->
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h3 class="help-title">How to Use Voice Chat:</h3>
+                <ol class="help-list">
+                    <li>Click the microphone button to start recording</li>
+                    <li>Speak your question or message clearly</li>
+                    <li>Click the microphone again to stop recording</li>
+                    <li>Wait for the AI to process and respond</li>
+                    <li>Listen to the AI's voice response</li>
+                    <li>Continue the conversation naturally</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRecording = false;
+        let isProcessing = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let conversationCount = 0;
+
+        // Update speed display
+        document.getElementById('voiceSpeed').addEventListener('input', function() {
+            document.getElementById('speedValue').textContent = this.value;
+        });
+
+        // Check browser compatibility
+        function checkBrowserSupport() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                document.getElementById('browserWarning').style.display = 'block';
+                return false;
+            }
+            return true;
+        }
+
+        // Update status display
+        function updateStatus(message, className) {
+            const statusDisplay = document.getElementById('statusDisplay');
+            statusDisplay.textContent = message;
+            statusDisplay.className = `status-display ${className}`;
+        }
+
+        // Update microphone button state
+        function updateMicButton(state) {
+            const micButton = document.getElementById('micButton');
+            micButton.className = `microphone-button ${state}`;
+            
+            switch(state) {
+                case 'recording':
+                    micButton.textContent = '⏹️';
+                    break;
+                case 'processing':
+                    micButton.textContent = '⏳';
+                    break;
+                default:
+                    micButton.textContent = '🎤';
+            }
+        }
+
+        // Add conversation item
+        function addConversationItem(role, text, audioBlob = null) {
+            const conversationList = document.getElementById('conversationList');
+            const item = document.createElement('div');
+            item.className = `conversation-item ${role}-message`;
+            
+            let audioHTML = '';
+            if (audioBlob) {
+                const audioURL = URL.createObjectURL(audioBlob);
+                audioHTML = `
+                    <div class="message-audio">
+                        <audio controls class="audio-player">
+                            <source src="${audioURL}" type="audio/wav">
+                            Your browser does not support audio playback.
+                        </audio>
+                    </div>
+                `;
+            }
+            
+            item.innerHTML = `
+                <div class="message-role">${role === 'user' ? '👤 You' : '🤖 AI Assistant'}</div>
+                <div class="message-text">${text}</div>
+                ${audioHTML}
+            `;
+            
+            conversationList.appendChild(item);
+            item.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Convert base64 to blob
+        function base64ToBlob(base64, contentType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: contentType });
+        }
+
+        // Process voice conversation
+        async function processVoiceConversation(audioBlob) {
+            try {
+                updateStatus('🔄 Processing your voice message...', 'status-processing');
+                updateMicButton('processing');
+                
+                // Prepare form data
+                const formData = new FormData();
+                formData.append('audio_file', audioBlob, 'voice_input.webm');
+                formData.append('language', document.getElementById('languageSelect').value);
+                formData.append('voice', 'default');
+                formData.append('speed', document.getElementById('voiceSpeed').value);
+                formData.append('model', document.getElementById('modelSelect').value);
+                
+                // Send to voice chat API
+                const response = await fetch('/api/voice-chat/conversation', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.error || 'Voice conversation failed');
+                }
+                
+                // Add user message to conversation
+                addConversationItem('user', result.text_input);
+                
+                // Add AI response to conversation with audio
+                const audioBlob = base64ToBlob(result.audio_base64, result.content_type);
+                addConversationItem('ai', result.text_response, audioBlob);
+                
+                // Auto-play AI response
+                setTimeout(() => {
+                    const lastAudio = document.querySelector('.conversation-item:last-child audio');
+                    if (lastAudio) {
+                        lastAudio.play();
+                    }
+                }, 500);
+                
+                updateStatus(`✅ Conversation completed in ${result.processing_time.toFixed(1)}s`, 'status-ready');
+                updateMicButton('');
+                conversationCount++;
+                
+            } catch (error) {
+                console.error('Voice conversation error:', error);
+                updateStatus(`❌ Error: ${error.message}`, 'status-error');
+                updateMicButton('');
+            }
+        }
+
+        // Toggle voice chat
+        async function toggleVoiceChat() {
+            if (isProcessing) return;
+            
+            if (!isRecording) {
+                // Start recording
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        } 
+                    });
+                    
+                    audioChunks = [];
+                    mediaRecorder = new MediaRecorder(stream, {
+                        mimeType: 'audio/webm;codecs=opus'
+                    });
+                    
+                    mediaRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) {
+                            audioChunks.push(event.data);
+                        }
+                    };
+                    
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        processVoiceConversation(audioBlob);
+                        
+                        // Stop all tracks to release microphone
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    
+                    mediaRecorder.start();
+                    isRecording = true;
+                    updateStatus('🎤 Listening... Click microphone to stop', 'status-listening');
+                    updateMicButton('recording');
+                    
+                } catch (error) {
+                    console.error('Error accessing microphone:', error);
+                    updateStatus('❌ Could not access microphone. Please check permissions.', 'status-error');
+                }
+            } else {
+                // Stop recording
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    isRecording = false;
+                    isProcessing = true;
+                }
+            }
+        }
+
+        // Return to main page
+        function returnToMain() {
+            window.location.href = '/';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            checkBrowserSupport();
+            
+            // Add welcome message
+            addConversationItem('ai', 'Hello! I\'m ready for voice conversation. Click the microphone and start speaking!');
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (event.code === 'Space' && !event.target.matches('input, textarea, select')) {
+                event.preventDefault();
+                toggleVoiceChat();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -14,6 +14,7 @@ from pathlib import Path
 from .core.config import get_settings
 from .core.network import NetworkManager
 from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management, file_upload, tts
+from .api.routes import voice_chat as voice_chat_routes
 
 # Mock logger
 class MockLogger:
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(user_management.router)  # Add user management routes
     app.include_router(file_upload.router)  # Add file upload and processing routes
     app.include_router(tts.router, prefix="/api")  # Add TTS routes
+    app.include_router(voice_chat_routes.router)  # Add voice chat routes
     
     # Mount static files for web interface BEFORE other routes
     web_dir = Path(__file__).parent.parent / "web"
@@ -208,6 +210,24 @@ def create_app() -> FastAPI:
                 <h1>Live Debug Tool Not Found</h1>
                 <p>The live-debug.html file is missing. Please ensure the web interface is properly installed.</p>
                 <p><a href="/web/live-debug.html">Try /web/live-debug.html</a> | <a href="/chat">Go to Chat</a></p>
+            </body></html>
+            """, status_code=404)
+    
+    # Serve voice chat interface
+    @app.get("/voice-chat", response_class=HTMLResponse)
+    async def voice_chat():
+        web_dir = Path(__file__).parent.parent / "web"
+        voice_chat_html = web_dir / "voice-chat.html"
+        
+        if voice_chat_html.exists():
+            return HTMLResponse(content=voice_chat_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <!DOCTYPE html><html><head><title>Voice Chat Not Found</title></head>
+            <body style="font-family: Arial, sans-serif; text-align: center; margin: 50px;">
+                <h1>Voice Chat Interface Not Found</h1>
+                <p>The voice-chat.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/web/voice-chat.html">Try /web/voice-chat.html</a> | <a href="/">Go to Main Page</a></p>
             </body></html>
             """, status_code=404)
     

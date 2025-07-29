@@ -466,3 +466,5 @@ cached_tts_service = CachedTTSService()
 
 # Connect the services
 cached_tts_service._service = tts_service
+
+print("TTS Service is running. Access the test page at http://localhost:8000/tts_test.html")
