@@ -145,6 +145,22 @@ def create_app() -> FastAPI:
             </body></html>
             """, status_code=404)
     
+    # Authentication interface route (without .html extension)
+    @app.get("/auth", response_class=HTMLResponse)
+    async def auth_interface_clean():
+        web_dir = Path(__file__).parent.parent / "web"
+        auth_html = web_dir / "auth.html"
+        if auth_html.exists():
+            return HTMLResponse(content=auth_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <html><body>
+                <h1>Authentication Interface Not Found</h1>
+                <p>The auth.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/chat">Go to Chat</a></p>
+            </body></html>
+            """, status_code=404)
+    
     # Serve optimized interface at root
     @app.get("/", response_class=HTMLResponse)
     async def root():
