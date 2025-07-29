@@ -195,7 +195,7 @@ class ChatBot {
     }
 
     redirectToAuth() {
-        window.location.href = '/auth.html';
+        window.location.href = '/auth';
     }
 
     dismissUpgradeModal(buttonElement) {
