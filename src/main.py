@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core.config import get_settings
 from .core.network import NetworkManager
-from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management, file_upload
+from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management, file_upload, tts
 
 # Mock logger
 class MockLogger:
@@ -107,6 +107,7 @@ def create_app() -> FastAPI:
     app.include_router(chatbot.router)  # Add chatbot routes with /api/chat prefix
     app.include_router(user_management.router)  # Add user management routes
     app.include_router(file_upload.router)  # Add file upload and processing routes
+    app.include_router(tts.router, prefix="/api")  # Add TTS routes
     
     # Mount static files for web interface BEFORE other routes
     web_dir = Path(__file__).parent.parent / "web"
@@ -240,7 +241,11 @@ def create_app() -> FastAPI:
                     "benchmark": "/api/optimized/benchmark",
                     "chat_message": "/api/chat/message",
                     "chat_conversations": "/api/chat/conversations",
-                    "chat_health": "/api/chat/health"
+                    "chat_health": "/api/chat/health",
+                    "tts_synthesize": "/api/tts/synthesize",
+                    "tts_translate_speak": "/api/tts/translate-and-speak",
+                    "tts_languages": "/api/tts/languages",
+                    "tts_health": "/api/tts/health"
                 }
             }
 
@@ -293,7 +298,11 @@ def create_app() -> FastAPI:
                 "benchmark": "/api/optimized/benchmark",
                 "chat_message": "/api/chat/message",
                 "chat_conversations": "/api/chat/conversations",
-                "chat_health": "/api/chat/health"
+                "chat_health": "/api/chat/health",
+                "tts_synthesize": "/api/tts/synthesize",
+                "tts_translate_speak": "/api/tts/translate-and-speak",
+                "tts_languages": "/api/tts/languages",
+                "tts_health": "/api/tts/health"
             }
         }
     

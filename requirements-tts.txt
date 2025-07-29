@@ -1,0 +1,26 @@
+# TTS (Text-to-Speech) Requirements for LLM Translation Service
+# Install these to enable TTS functionality
+
+# Core TTS library
+coqui-tts>=0.20.0
+
+# PyTorch dependencies (adjust based on your system)
+# For CPU-only:
+# torch>=2.0.0
+# torchaudio>=2.0.0
+
+# For CUDA GPU support (recommended for better performance):
+# Install manually with:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Audio processing dependencies
+librosa>=0.10.0
+soundfile>=0.12.1
+numpy>=1.21.0
+
+# Optional: Edge TTS alternative (lightweight, no GPU required)
+edge-tts>=6.1.0
+
+# Optional: Enhanced audio processing
+pydub>=0.25.1
+speechrecognition>=3.10.0

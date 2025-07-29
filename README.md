@@ -25,6 +25,7 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
 - ⚡ **Extreme Performance**: 30.8% faster cold cache, 244,891x faster warm cache with optimized endpoints  
 - 🔄 **Bidirectional Translation**: Chinese ↔ English translation support with auto-detection
 - 🎛️ **Dual Translation Modes**: Succinct (default) for clean output, Verbose for detailed explanations
+- 🎤 **Text-to-Speech (TTS)**: Convert translations to natural speech with multi-language support
 - 🔗 **API Compatibility**: Drop-in replacement for Baidu Translate API with signature validation
 - 🏎️ **Connection Pooling**: Persistent HTTP connections with 100% reuse rate for maximum efficiency
 - 🗄️ **Smart Caching**: Enhanced LRU cache with gzip compression and mode-aware cache keys
@@ -159,6 +160,24 @@ cd llmYTranslate
 ./scripts/stop-service.sh --force   # Force stop all
 ./scripts/stop-service.sh --ngrok-only    # Stop only ngrok
 ```
+
+#### 🛑 Complete System Shutdown (New!)
+For comprehensive shutdown including Tailscale and all network services:
+```powershell
+# Windows - Complete shutdown with all network services
+.\shutdown.ps1                     # Stop everything
+.\shutdown.ps1 -KeepTailscale      # Keep Tailscale running
+.\shutdown.ps1 -KeepNgrok          # Keep ngrok running
+.\shutdown.ps1 -Force              # Force stop all processes
+.\shutdown.ps1 -Quiet              # Silent operation
+
+# Windows Batch (alternative)
+shutdown.bat --keep-tailscale --quiet
+
+# Unix/Linux/macOS
+./shutdown.sh --keep-tailscale --force
+```
+📖 **[Complete Shutdown Guide](SHUTDOWN_SCRIPTS.md)** - Detailed documentation for all shutdown options
 
 ### Remote Access Setup
 
@@ -506,6 +525,136 @@ print(f"Translation: {result}")
 #       "dst": "你好，你今天怎么样？"
 #     }
 #   ]
+# }
+```
+
+## 🎤 Text-to-Speech (TTS) Integration
+
+### TTS Setup
+
+```powershell
+# Install TTS dependencies
+.\install-tts.ps1
+
+# Or install manually:
+pip install coqui-tts
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+### TTS API Usage
+
+#### Basic Text-to-Speech
+```bash
+# Convert text to speech
+curl -X POST "http://localhost:8000/api/tts/synthesize" \
+     -F "text=Hello, this is a test of text-to-speech!" \
+     -F "language=en" \
+     -F "voice_speed=1.0" \
+     -F "output_format=wav"
+```
+
+#### Translate and Speak (Combined)
+```bash
+# Translate text and convert to speech in one request
+curl -X POST "http://localhost:8000/api/tts/translate-and-speak" \
+     -F "text=Hello, how are you today?" \
+     -F "from_lang=en" \
+     -F "to_lang=zh" \
+     -F "voice_speed=1.2"
+```
+
+#### Available TTS Languages
+```bash
+# Get list of supported TTS languages
+curl "http://localhost:8000/api/tts/languages"
+```
+
+### TTS Python Client
+
+```python
+import requests
+import base64
+
+def text_to_speech(text, language="en", voice_speed=1.0):
+    """Convert text to speech using the TTS API."""
+    response = requests.post("http://localhost:8000/api/tts/synthesize", data={
+        "text": text,
+        "language": language,
+        "voice_speed": voice_speed,
+        "output_format": "wav"
+    })
+    
+    if response.status_code == 200:
+        result = response.json()
+        if result["success"]:
+            # Decode base64 audio data
+            audio_data = base64.b64decode(result["audio_base64"])
+            
+            # Save to file
+            with open("output.wav", "wb") as f:
+                f.write(audio_data)
+            
+            print(f"Audio saved! Processing time: {result['processing_time']:.2f}s")
+            return True
+    
+    return False
+
+def translate_and_speak(text, from_lang, to_lang, voice_speed=1.0):
+    """Translate text and convert to speech."""
+    response = requests.post("http://localhost:8000/api/tts/translate-and-speak", data={
+        "text": text,
+        "from_lang": from_lang,
+        "to_lang": to_lang,
+        "voice_speed": voice_speed
+    })
+    
+    if response.status_code == 200:
+        result = response.json()
+        if result["success"]:
+            print(f"Original: {result['original_text']}")
+            print(f"Translation: {result['translated_text']}")
+            
+            # Save audio
+            audio_data = base64.b64decode(result["audio_base64"])
+            with open("translation.wav", "wb") as f:
+                f.write(audio_data)
+            
+            print(f"Translation audio saved! Total time: {result['performance']['total_time']:.2f}s")
+            return True
+    
+    return False
+
+# Usage examples
+text_to_speech("Hello, this is a test!", "en", 1.0)
+translate_and_speak("Hello world", "en", "zh", 1.2)
+```
+
+### TTS Features
+
+- 🎤 **Multi-language Support**: English, Chinese, and multilingual models
+- ⚡ **Fast Processing**: Optimized for real-time speech synthesis
+- 🔧 **Customizable**: Adjustable voice speed and output format
+- 💾 **Smart Caching**: Cached TTS results for faster repeated requests
+- 🔄 **Translation Integration**: Seamless translate-and-speak workflow
+- 🎯 **Local Processing**: No external API dependencies, works offline
+- 🔊 **High Quality**: Neural TTS models for natural-sounding speech
+
+### TTS Health Check
+
+```bash
+# Check TTS service status
+curl "http://localhost:8000/api/tts/health"
+
+# Example response:
+# {
+#   "success": true,
+#   "status": "healthy",
+#   "details": {
+#     "tts_available": true,
+#     "initialized": true,
+#     "loaded_models": ["en", "zh"],
+#     "available_languages": ["en", "zh", "multilingual"]
+#   }
 # }
 ```
 
