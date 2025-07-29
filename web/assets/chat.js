@@ -1,4 +1,194 @@
 // Cross-Platform Chat JavaScript with User Authentication
+class ProgressTracker {
+    constructor(container, title = 'Processing...') {
+        this.container = container;
+        this.title = title;
+        this.startTime = Date.now();
+        this.stages = [];
+        this.currentStageIndex = -1;
+        this.timers = {};
+        this.isCompleted = false;
+        this.element = null;
+        
+        this.init();
+    }
+    
+    init() {
+        this.element = document.createElement('div');
+        this.element.className = 'progress-container';
+        this.container.appendChild(this.element);
+        this.render();
+        this.startGlobalTimer();
+    }
+    
+    addStage(id, text, duration = null) {
+        this.stages.push({
+            id,
+            text,
+            status: 'pending', // pending, active, completed, error
+            startTime: null,
+            endTime: null,
+            estimatedDuration: duration
+        });
+        this.render();
+        return this;
+    }
+    
+    startStage(stageId, customText = null) {
+        // Complete current stage if exists
+        if (this.currentStageIndex >= 0) {
+            this.completeStage(this.stages[this.currentStageIndex].id);
+        }
+        
+        // Find and start new stage
+        const stageIndex = this.stages.findIndex(s => s.id === stageId);
+        if (stageIndex !== -1) {
+            this.currentStageIndex = stageIndex;
+            const stage = this.stages[stageIndex];
+            stage.status = 'active';
+            stage.startTime = Date.now();
+            if (customText) stage.text = customText;
+            
+            this.render();
+            console.log(`🎯 Stage started: ${stage.text}`);
+        }
+        return this;
+    }
+    
+    completeStage(stageId, customText = null) {
+        const stage = this.stages.find(s => s.id === stageId);
+        if (stage && stage.status === 'active') {
+            stage.status = 'completed';
+            stage.endTime = Date.now();
+            if (customText) stage.text = customText;
+            
+            this.render();
+            console.log(`✅ Stage completed: ${stage.text} (${stage.endTime - stage.startTime}ms)`);
+        }
+        return this;
+    }
+    
+    errorStage(stageId, errorText = null) {
+        const stage = this.stages.find(s => s.id === stageId);
+        if (stage) {
+            stage.status = 'error';
+            stage.endTime = Date.now();
+            if (errorText) stage.text = errorText;
+            
+            this.render();
+            console.log(`❌ Stage error: ${stage.text}`);
+        }
+        return this;
+    }
+    
+    complete(successMessage = 'Completed successfully!') {
+        // Complete any active stage
+        if (this.currentStageIndex >= 0) {
+            const activeStage = this.stages[this.currentStageIndex];
+            if (activeStage.status === 'active') {
+                this.completeStage(activeStage.id);
+            }
+        }
+        
+        this.isCompleted = true;
+        this.title = successMessage;
+        this.render();
+        
+        // Auto-remove after delay
+        setTimeout(() => {
+            if (this.element && this.element.parentNode) {
+                this.element.style.animation = 'progressSlide 0.3s ease-out reverse';
+                setTimeout(() => {
+                    if (this.element && this.element.parentNode) {
+                        this.element.remove();
+                    }
+                }, 300);
+            }
+        }, 2000);
+        
+        return this;
+    }
+    
+    remove() {
+        if (this.element && this.element.parentNode) {
+            this.element.remove();
+        }
+        return this;
+    }
+    
+    startGlobalTimer() {
+        const updateTimer = () => {
+            if (!this.isCompleted && this.element) {
+                this.render();
+                requestAnimationFrame(updateTimer);
+            }
+        };
+        requestAnimationFrame(updateTimer);
+    }
+    
+    formatDuration(ms) {
+        if (ms < 1000) return `${ms}ms`;
+        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+        return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+    }
+    
+    getStageIcon(status) {
+        switch (status) {
+            case 'pending': return '○';
+            case 'active': return '●';
+            case 'completed': return '✓';
+            case 'error': return '✕';
+            default: return '○';
+        }
+    }
+    
+    calculateProgress() {
+        const completedStages = this.stages.filter(s => s.status === 'completed').length;
+        const totalStages = this.stages.length;
+        return totalStages > 0 ? (completedStages / totalStages) * 100 : 0;
+    }
+    
+    render() {
+        if (!this.element) return;
+        
+        const elapsed = Date.now() - this.startTime;
+        const progress = this.calculateProgress();
+        
+        const stagesHtml = this.stages.map(stage => {
+            let duration = '';
+            if (stage.startTime) {
+                const stageDuration = stage.endTime ? 
+                    stage.endTime - stage.startTime : 
+                    Date.now() - stage.startTime;
+                duration = this.formatDuration(stageDuration);
+            }
+            
+            return `
+                <div class="progress-stage">
+                    <div class="stage-icon ${stage.status}">
+                        ${this.getStageIcon(stage.status)}
+                    </div>
+                    <div class="stage-text ${stage.status}">
+                        ${stage.text}
+                    </div>
+                    ${duration ? `<div class="stage-duration">${duration}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+        
+        this.element.innerHTML = `
+            <div class="progress-header">
+                <div class="progress-title">${this.title}</div>
+                <div class="progress-timer">${this.formatDuration(elapsed)}</div>
+            </div>
+            ${stagesHtml}
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: ${progress}%"></div>
+            </div>
+        `;
+    }
+}
+
 class ChatBot {
     constructor() {
         this.conversationId = this.generateConversationId();
@@ -638,6 +828,30 @@ class ChatBot {
         if (this.isGuest) {
             this.guestLimits.currentConversationMessages++;
         }
+
+        // Create progress tracker
+        const messagesContainer = document.getElementById('chat-messages');
+        const progressTitle = this.attachedFiles.length > 0 ? 
+            `Processing ${this.attachedFiles.length} file(s) and generating response...` : 
+            'Generating AI response...';
+        
+        const progressTracker = new ProgressTracker(messagesContainer, progressTitle);
+        
+        // Setup progress stages based on request type
+        if (this.attachedFiles.length > 0) {
+            progressTracker
+                .addStage('validate', 'Validating files and request...')
+                .addStage('upload', `Uploading ${this.attachedFiles.length} file(s)...`)
+                .addStage('analyze', 'Analyzing files with vision AI...')
+                .addStage('process', 'Processing with language model...')
+                .addStage('finalize', 'Finalizing response...');
+        } else {
+            progressTracker
+                .addStage('validate', 'Validating message...')
+                .addStage('connect', 'Connecting to AI model...')
+                .addStage('process', 'Generating response...')
+                .addStage('finalize', 'Preparing response...');
+        }
         
         // Update UI to show loading
         sendButton.disabled = true;
@@ -645,6 +859,9 @@ class ChatBot {
         const sendLoading = sendButton.querySelector('.send-loading');
         sendText.style.display = 'none';
         sendLoading.style.display = 'inline';
+        
+        // Start validation stage
+        progressTracker.startStage('validate');
         
         // Show loading message for file uploads
         if (this.attachedFiles.length > 0) {
@@ -661,10 +878,17 @@ class ChatBot {
             console.log('Conversation ID:', this.conversationId);
             console.log('Model:', this.currentModel);
             
+            // Simulate validation delay
+            await new Promise(resolve => setTimeout(resolve, 300));
+            progressTracker.completeStage('validate', 'Request validated ✓');
+            
             // Determine endpoint and request body based on file attachments
             let endpoint, requestBody;
             
             if (this.attachedFiles.length > 0) {
+                // Start upload stage
+                progressTracker.startStage('upload', `Uploading ${this.attachedFiles.length} file(s)...`);
+                
                 // Use file chat endpoint
                 endpoint = '/api/files/chat-with-files';
                 requestBody = {
@@ -680,7 +904,15 @@ class ChatBot {
                 console.log('Using file chat endpoint with files:', this.attachedFiles.length);
                 console.log('Request body size:', JSON.stringify(requestBody).length, 'chars');
                 this.showNotification(`Sending message with ${this.attachedFiles.length} file(s)...`, 'info');
+                
+                // Simulate upload delay
+                await new Promise(resolve => setTimeout(resolve, 800));
+                progressTracker.completeStage('upload', `${this.attachedFiles.length} file(s) uploaded ✓`);
+                progressTracker.startStage('analyze', 'Analyzing files with vision AI...');
             } else {
+                // Start connection stage
+                progressTracker.startStage('connect', 'Connecting to AI model...');
+                
                 // Use regular chat endpoint
                 endpoint = '/api/chat/message';
                 requestBody = {
@@ -689,6 +921,10 @@ class ChatBot {
                     model: this.currentModel
                 };
                 console.log('Using regular chat endpoint');
+                
+                // Simulate connection delay
+                await new Promise(resolve => setTimeout(resolve, 200));
+                progressTracker.completeStage('connect', 'Connected to AI model ✓');
             }
             
             const headers = this.getAuthHeaders();
@@ -696,6 +932,13 @@ class ChatBot {
             console.log('Sending to endpoint:', endpoint);
             
             console.log('Making fetch request...');
+            
+            // Start processing stage
+            if (this.attachedFiles.length > 0) {
+                progressTracker.completeStage('analyze', 'Files analyzed ✓');
+            }
+            progressTracker.startStage('process', 'AI model processing...');
+            
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: headers,
@@ -710,13 +953,21 @@ class ChatBot {
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('Error response body:', errorText);
+                progressTracker.errorStage('process', `Server error: ${response.status}`);
                 this.showNotification(`Server error: ${response.status} ${response.statusText}`, 'error');
                 throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
             }
             
+            // Start finalization stage
+            progressTracker.completeStage('process', 'Response generated ✓');
+            progressTracker.startStage('finalize', 'Preparing response...');
+            
             console.log('Parsing response JSON...');
             const data = await response.json();
             console.log('Response data received:', data);
+            
+            // Simulate finalization delay
+            await new Promise(resolve => setTimeout(resolve, 200));
             
             if (data.response) {
                 console.log('Adding bot response to chat');
@@ -750,9 +1001,14 @@ class ChatBot {
                 console.log('Clearing attached files...');
                 this.attachedFiles = [];
                 this.updateAttachedFilesDisplay();
+                
+                // Complete progress
+                progressTracker.complete('Response completed successfully! ✨');
                 this.showNotification('✅ Message sent successfully!', 'success');
+                
             } else {
                 console.error('No response content in data');
+                progressTracker.errorStage('finalize', 'Empty response received');
                 this.addMessage('⚠️ Sorry, I received an empty response. Please try again.', false);
             }
             
@@ -760,10 +1016,22 @@ class ChatBot {
             console.error('=== SEND MESSAGE ERROR ===');
             console.error('Chat error details:', error);
             console.error('Error stack:', error.stack);
+            
+            // Update progress tracker with error
+            progressTracker.errorStage(progressTracker.currentStageIndex >= 0 ? 
+                progressTracker.stages[progressTracker.currentStageIndex].id : 'process', 
+                `Error: ${error.message}`);
+            
             this.addMessage(`⚠️ Error: ${error.message}. Please try again or check your connection.`, false);
             this.isConnected = false;
             this.updateConnectionStatus();
             this.showNotification(`Error: ${error.message}`, 'error');
+            
+            // Remove progress tracker after error
+            setTimeout(() => {
+                progressTracker.remove();
+            }, 3000);
+            
         } finally {
             console.log('Resetting UI state...');
             // Reset button state
