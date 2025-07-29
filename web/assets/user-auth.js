@@ -90,7 +90,20 @@ class UserAuth {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.detail || 'Login failed');
+                // Handle validation errors (422) and other errors
+                if (data.detail) {
+                    if (Array.isArray(data.detail)) {
+                        // Handle validation errors - show the first error message
+                        const firstError = data.detail[0];
+                        throw new Error(firstError.msg || 'Login failed');
+                    } else if (typeof data.detail === 'string') {
+                        throw new Error(data.detail);
+                    } else {
+                        throw new Error('Login failed');
+                    }
+                } else {
+                    throw new Error('Login failed');
+                }
             }
 
             // Store authentication info
@@ -149,7 +162,20 @@ class UserAuth {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.detail || 'Registration failed');
+                // Handle validation errors (422) and other errors
+                if (data.detail) {
+                    if (Array.isArray(data.detail)) {
+                        // Handle validation errors - show the first error message
+                        const firstError = data.detail[0];
+                        throw new Error(firstError.msg || 'Validation failed');
+                    } else if (typeof data.detail === 'string') {
+                        throw new Error(data.detail);
+                    } else {
+                        throw new Error('Registration failed');
+                    }
+                } else {
+                    throw new Error('Registration failed');
+                }
             }
 
             // Auto-login after successful registration
@@ -206,7 +232,20 @@ class UserAuth {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.detail || 'Failed to create guest session');
+                // Handle validation errors (422) and other errors
+                if (data.detail) {
+                    if (Array.isArray(data.detail)) {
+                        // Handle validation errors - show the first error message
+                        const firstError = data.detail[0];
+                        throw new Error(firstError.msg || 'Failed to create guest session');
+                    } else if (typeof data.detail === 'string') {
+                        throw new Error(data.detail);
+                    } else {
+                        throw new Error('Failed to create guest session');
+                    }
+                } else {
+                    throw new Error('Failed to create guest session');
+                }
             }
 
             // Store guest session info
@@ -435,7 +474,7 @@ class UserAuth {
         this.sessionId = null;
 
         // Redirect to auth page
-        window.location.href = '/auth.html';
+        window.location.href = '/auth';
     }
 }
 
