@@ -385,6 +385,145 @@ Translation:"""
             "error": "Max retries exceeded",
             "response": None
         }
+
+    async def generate_vision(
+        self,
+        model: str,
+        prompt: str,
+        image_base64: str,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7
+    ) -> Dict[str, Any]:
+        """Generate a response using a vision model with image input."""
+        
+        # Prepare vision request data
+        request_data = {
+            "model": model,
+            "prompt": prompt,
+            "images": [image_base64],
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens or 1000,
+                "top_p": 0.9
+            }
+        }
+        
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(
+                    "Sending vision request to Ollama",
+                    attempt=attempt + 1,
+                    model=model,
+                    prompt_length=len(prompt)
+                )
+                
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(self.timeout * 2),  # Vision models may take longer
+                    trust_env=False
+                ) as client:
+                    response = await client.post(
+                        f"{self.base_url}/api/generate",
+                        json=request_data,
+                        headers={"Content-Type": "application/json"}
+                    )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    logger.info(
+                        "Vision response received from Ollama",
+                        model=model,
+                        response_length=len(result.get("response", ""))
+                    )
+                    
+                    return {
+                        "success": True,
+                        "response": result.get("response", ""),
+                        "model": result.get("model", model),
+                        "prompt_eval_count": result.get("prompt_eval_count"),
+                        "eval_count": result.get("eval_count"),
+                        "total_duration": result.get("total_duration"),
+                        "confidence": self._estimate_confidence(result.get("response", ""))
+                    }
+                else:
+                    error_msg = f"HTTP {response.status_code}: {response.text}"
+                    logger.warning(
+                        "Ollama vision request failed",
+                        status_code=response.status_code,
+                        response=response.text,
+                        attempt=attempt + 1
+                    )
+                    
+                    if attempt == self.max_retries - 1:
+                        return {
+                            "success": False,
+                            "error": error_msg,
+                            "response": ""
+                        }
+                    
+                    await asyncio.sleep(2 ** attempt)
+                    
+            except Exception as e:
+                logger.error(
+                    "Ollama vision request exception",
+                    error=str(e),
+                    attempt=attempt + 1
+                )
+                
+                if attempt == self.max_retries - 1:
+                    return {
+                        "success": False,
+                        "error": str(e),
+                        "response": ""
+                    }
+                
+                await asyncio.sleep(2 ** attempt)
+        
+        return {
+            "success": False,
+            "error": "Max retries exceeded",
+            "response": ""
+        }
+
+    async def generate_text(
+        self,
+        model: str,
+        prompt: str,
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7
+    ) -> Dict[str, Any]:
+        """Generate text using a text model."""
+        return await self.generate(
+            prompt=prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+
+    def _estimate_confidence(self, response: str) -> Optional[float]:
+        """Estimate confidence score based on response characteristics."""
+        if not response:
+            return 0.0
+        
+        # Simple heuristic based on response length and certainty words
+        confidence_words = ['clearly', 'definitely', 'obvious', 'certain', 'sure']
+        uncertainty_words = ['maybe', 'perhaps', 'might', 'possibly', 'unclear', 'difficult to tell']
+        
+        response_lower = response.lower()
+        confidence_count = sum(1 for word in confidence_words if word in response_lower)
+        uncertainty_count = sum(1 for word in uncertainty_words if word in response_lower)
+        
+        # Base confidence on response length and word indicators
+        base_confidence = min(0.9, len(response) / 500)
+        
+        # Adjust based on confidence indicators
+        if confidence_count > uncertainty_count:
+            return min(0.95, base_confidence + 0.1)
+        elif uncertainty_count > confidence_count:
+            return max(0.3, base_confidence - 0.2)
+        
+        return base_confidence
     
     def create_cache_key(
         self,
