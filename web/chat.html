@@ -38,7 +38,14 @@
         </div>
         
         <div class="chat-input-container">
+            <!-- Attached Files Display -->
+            <div id="attached-files" class="attached-files" style="display: none;"></div>
+            
             <div class="chat-input">
+                <input type="file" id="file-input" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx" style="display: none;">
+                <button id="file-upload-btn" class="file-upload-btn" title="Upload files (images, documents)">
+                    📎
+                </button>
                 <input type="text" id="message-input" placeholder="Type your message... (Ctrl+Enter to send)" maxlength="10000">
                 <button onclick="sendMessage()" id="send-button">
                     <span class="send-text">Send</span>

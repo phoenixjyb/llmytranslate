@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core.config import get_settings
 from .core.network import NetworkManager
-from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management
+from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management, file_upload
 
 # Mock logger
 class MockLogger:
@@ -106,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(discovery.router)  # Discovery routes already have /api/discovery prefix
     app.include_router(chatbot.router)  # Add chatbot routes with /api/chat prefix
     app.include_router(user_management.router)  # Add user management routes
+    app.include_router(file_upload.router)  # Add file upload and processing routes
     
     # Mount static files for web interface BEFORE other routes
     web_dir = Path(__file__).parent.parent / "web"
@@ -190,6 +191,22 @@ def create_app() -> FastAPI:
                 <h1>Authentication Interface Not Found</h1>
                 <p>The auth.html file is missing. Please ensure the web interface is properly installed.</p>
                 <p><a href="/chat">Go to Chat</a></p>
+            </body></html>
+            """, status_code=404)
+
+    # Live debug tool route  
+    @app.get("/live-debug.html", response_class=HTMLResponse)
+    async def live_debug_interface():
+        web_dir = Path(__file__).parent.parent / "web"
+        live_debug_html = web_dir / "live-debug.html"
+        if live_debug_html.exists():
+            return HTMLResponse(content=live_debug_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <html><body>
+                <h1>Live Debug Tool Not Found</h1>
+                <p>The live-debug.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/web/live-debug.html">Try /web/live-debug.html</a> | <a href="/chat">Go to Chat</a></p>
             </body></html>
             """, status_code=404)
     

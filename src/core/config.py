@@ -55,6 +55,7 @@ class OllamaSettings(BaseSettings):
         if "OLLAMA_HOST" in os.environ:
             kwargs["ollama_host"] = os.environ["OLLAMA_HOST"]
         super().__init__(**kwargs)
+        
     request_timeout: int = Field(
         default=60,
         description="Request timeout in seconds"

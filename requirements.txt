@@ -34,6 +34,11 @@ email-validator==2.1.0
 python-dotenv==1.0.0
 PyYAML==6.0.1
 
+# File Processing
+Pillow==10.1.0
+PyMuPDF==1.23.8
+python-docx==1.1.0
+
 # Logging and Monitoring
 structlog==23.2.0
 prometheus-client==0.19.0

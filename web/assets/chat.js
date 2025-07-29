@@ -13,6 +13,16 @@ class ChatBot {
             maxMessagesPerConversation: 20,
             currentConversationMessages: 0
         };
+        
+        // File upload properties
+        this.attachedFiles = [];
+        this.maxFileSize = 50 * 1024 * 1024; // 50MB
+        this.supportedFileTypes = {
+            images: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
+            documents: ['pdf', 'txt', 'md', 'doc', 'docx'],
+            maxFiles: 5
+        };
+        
         this.init();
     }
 
@@ -22,6 +32,26 @@ class ChatBot {
         this.updateConnectionStatus();
         this.loadModelSelect();
         this.setupUserInterface();
+        this.initFileUpload();
+        this.setupKeyboardShortcuts();
+    }
+
+    setupKeyboardShortcuts() {
+        const messageInput = document.getElementById('message-input');
+        if (messageInput) {
+            messageInput.addEventListener('keydown', (e) => {
+                // Ctrl+Enter or Cmd+Enter to send
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+                // Enter alone to send (optional - you can remove this if you prefer only Ctrl+Enter)
+                else if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            });
+        }
     }
 
     generateConversationId() {
@@ -344,15 +374,244 @@ class ChatBot {
             .replace(/\*(.*?)\*/g, '<em>$1</em>'); // Italic
     }
 
+    // File upload methods
+    initFileUpload() {
+        console.log('Initializing file upload...');
+        const fileInput = document.getElementById('file-input');
+        const fileUploadBtn = document.getElementById('file-upload-btn');
+        const attachedFilesContainer = document.getElementById('attached-files');
+        
+        console.log('File input found:', !!fileInput);
+        console.log('File upload button found:', !!fileUploadBtn);
+        console.log('Attached files container found:', !!attachedFilesContainer);
+        
+        if (fileUploadBtn) {
+            fileUploadBtn.addEventListener('click', () => {
+                console.log('File upload button clicked');
+                fileInput.click();
+            });
+        } else {
+            console.error('File upload button not found');
+        }
+        
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                console.log('File input changed, files:', e.target.files.length);
+                this.handleFileSelection(e.target.files);
+            });
+        } else {
+            console.error('File input not found');
+        }
+        
+        // Drag and drop support
+        const chatInput = document.getElementById('message-input');
+        if (chatInput) {
+            chatInput.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                chatInput.classList.add('drag-over');
+            });
+            
+            chatInput.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                chatInput.classList.remove('drag-over');
+            });
+            
+            chatInput.addEventListener('drop', (e) => {
+                e.preventDefault();
+                chatInput.classList.remove('drag-over');
+                this.handleFileSelection(e.dataTransfer.files);
+            });
+        }
+    }
+    
+    async handleFileSelection(files) {
+        console.log('handleFileSelection called with', files.length, 'files');
+        this.showNotification(`Processing ${files.length} file(s)...`, 'info');
+        
+        for (let file of files) {
+            console.log('Processing file:', file.name, 'size:', file.size, 'type:', file.type);
+            
+            if (this.attachedFiles.length >= this.supportedFileTypes.maxFiles) {
+                this.showNotification(`Maximum ${this.supportedFileTypes.maxFiles} files allowed`, 'warning');
+                break;
+            }
+            
+            if (file.size > this.maxFileSize) {
+                this.showNotification(`File "${file.name}" is too large (max 50MB)`, 'error');
+                continue;
+            }
+            
+            if (!this.isFileTypeSupported(file)) {
+                console.log('File type not supported:', file.name);
+                this.showNotification(`File type not supported: ${file.name}`, 'error');
+                continue;
+            }
+            
+            console.log('Converting file to base64...');
+            this.showNotification(`Converting ${file.name} to base64...`, 'info');
+            
+            try {
+                // Convert file to base64
+                const fileData = await this.fileToBase64(file);
+                console.log('Base64 conversion completed, length:', fileData.length);
+                
+                // Decode to check actual content size
+                const decodedData = atob(fileData);
+                const actualSize = decodedData.length;
+                console.log('Original file size:', file.size, 'Decoded content size:', actualSize);
+                
+                const fileUpload = {
+                    file_id: this.generateFileId(),
+                    filename: file.name,
+                    content_type: file.type,
+                    file_size: actualSize, // Use actual decoded size instead of file.size
+                    file_data: fileData,
+                    file_category: this.getFileCategory(file.type)
+                };
+                
+                console.log('File processed successfully:', fileUpload.filename);
+                this.attachedFiles.push(fileUpload);
+                this.updateAttachedFilesDisplay();
+                this.showNotification(`✓ ${file.name} attached successfully`, 'success');
+                
+            } catch (error) {
+                console.error('Error processing file:', file.name, error);
+                this.showNotification(`Error processing ${file.name}: ${error.message}`, 'error');
+            }
+        }
+        
+        console.log('Total attached files:', this.attachedFiles.length);
+    }
+    
+    isFileTypeSupported(file) {
+        const extension = file.name.split('.').pop().toLowerCase();
+        const allSupportedTypes = [
+            ...this.supportedFileTypes.images,
+            ...this.supportedFileTypes.documents
+        ];
+        return allSupportedTypes.includes(extension);
+    }
+    
+    getFileCategory(contentType) {
+        if (contentType.startsWith('image/')) return 'image';
+        if (contentType.startsWith('text/') || contentType.includes('pdf') || contentType.includes('document')) return 'document';
+        return 'other';
+    }
+    
+    async fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                // Remove the data URL prefix (e.g., "data:image/png;base64,")
+                const base64 = reader.result.split(',')[1];
+                resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    generateFileId() {
+        return 'file-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    }
+    
+    updateAttachedFilesDisplay() {
+        const container = document.getElementById('attached-files');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        this.attachedFiles.forEach((file, index) => {
+            const fileElement = document.createElement('div');
+            fileElement.className = 'attached-file';
+            fileElement.innerHTML = `
+                <div class="file-info">
+                    <span class="file-icon">${this.getFileIcon(file.file_category)}</span>
+                    <span class="file-name">${file.filename}</span>
+                    <span class="file-size">${this.formatFileSize(file.file_size)}</span>
+                </div>
+                <button class="remove-file-btn" onclick="chatBot.removeFile(${index})">×</button>
+            `;
+            container.appendChild(fileElement);
+        });
+        
+        // Show/hide the container
+        container.style.display = this.attachedFiles.length > 0 ? 'block' : 'none';
+    }
+    
+    removeFile(index) {
+        this.attachedFiles.splice(index, 1);
+        this.updateAttachedFilesDisplay();
+    }
+    
+    getFileIcon(category) {
+        const icons = {
+            image: '🖼️',
+            document: '📄',
+            other: '📎'
+        };
+        return icons[category] || icons.other;
+    }
+    
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    showNotification(message, type = 'info') {
+        // You can implement a more sophisticated notification system
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        const colors = {
+            info: '#3b82f6',
+            warning: '#f59e0b',
+            error: '#ef4444',
+            success: '#10b981'
+        };
+        
+        notification.style.backgroundColor = colors[type] || colors.info;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+
     async sendMessage() {
+        console.log('=== SEND MESSAGE START ===');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
         const message = messageInput.value.trim();
         
-        if (!message) return;
+        console.log('Message input:', message);
+        console.log('Attached files count:', this.attachedFiles.length);
+        console.log('Attached files:', this.attachedFiles);
+        
+        if (!message && this.attachedFiles.length === 0) {
+            console.log('No message and no files - exiting');
+            this.showNotification('Please enter a message or attach files', 'warning');
+            return;
+        }
         
         // Check guest limitations
         if (this.isGuest) {
+            console.log('Guest mode - checking limitations');
             if (this.guestLimits.currentConversationMessages >= this.guestLimits.maxMessagesPerConversation) {
                 this.addMessage('🚫 Guest limit reached. Sign up for unlimited conversations!', false);
                 this.showUpgradePrompt();
@@ -361,6 +620,7 @@ class ChatBot {
         }
         
         // Check connection
+        console.log('Checking connection...');
         if (!this.isConnected) {
             await this.checkConnection();
             if (!this.isConnected) {
@@ -368,9 +628,10 @@ class ChatBot {
                 return;
             }
         }
+        console.log('Connection check passed');
         
         // Add user message
-        this.addMessage(message, true);
+        this.addMessage(message || '[File upload]', true);
         messageInput.value = '';
         
         // Update guest message count
@@ -380,44 +641,92 @@ class ChatBot {
         
         // Update UI to show loading
         sendButton.disabled = true;
-        sendButton.querySelector('.send-text').style.display = 'none';
-        sendButton.querySelector('.send-loading').style.display = 'inline';
+        const sendText = sendButton.querySelector('.send-text');
+        const sendLoading = sendButton.querySelector('.send-loading');
+        sendText.style.display = 'none';
+        sendLoading.style.display = 'inline';
         
+        // Show loading message for file uploads
+        if (this.attachedFiles.length > 0) {
+            sendLoading.textContent = `Uploading ${this.attachedFiles.length} file(s)...`;
+            this.showNotification(`Processing ${this.attachedFiles.length} file(s), please wait...`, 'info');
+            console.log('Set loading state for file upload');
+        } else {
+            sendLoading.textContent = 'Sending...';
+            console.log('Set loading state for text message');
+        }
+
         try {
-            console.log('Sending message:', message);
+            console.log('Preparing request...');
             console.log('Conversation ID:', this.conversationId);
             console.log('Model:', this.currentModel);
             
-            const requestBody = {
-                message: message,
-                conversation_id: this.conversationId,
-                model: this.currentModel
-            };
-            console.log('Request body:', requestBody);
+            // Determine endpoint and request body based on file attachments
+            let endpoint, requestBody;
+            
+            if (this.attachedFiles.length > 0) {
+                // Use file chat endpoint
+                endpoint = '/api/files/chat-with-files';
+                requestBody = {
+                    message: message || 'Please analyze these files',
+                    files: this.attachedFiles,
+                    conversation_id: this.conversationId,
+                    model: this.currentModel,
+                    vision_model: 'llava:latest',
+                    auto_analyze_files: true,
+                    max_tokens: 1000,
+                    temperature: 0.7
+                };
+                console.log('Using file chat endpoint with files:', this.attachedFiles.length);
+                console.log('Request body size:', JSON.stringify(requestBody).length, 'chars');
+                this.showNotification(`Sending message with ${this.attachedFiles.length} file(s)...`, 'info');
+            } else {
+                // Use regular chat endpoint
+                endpoint = '/api/chat/message';
+                requestBody = {
+                    message: message,
+                    conversation_id: this.conversationId,
+                    model: this.currentModel
+                };
+                console.log('Using regular chat endpoint');
+            }
             
             const headers = this.getAuthHeaders();
             console.log('Request headers:', headers);
+            console.log('Sending to endpoint:', endpoint);
             
-            const response = await fetch('/api/chat/message', {
+            console.log('Making fetch request...');
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: headers,
                 body: JSON.stringify(requestBody)
             });
             
+            console.log('Response received');
             console.log('Response status:', response.status);
             console.log('Response ok:', response.ok);
+            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
             
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('Error response body:', errorText);
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                this.showNotification(`Server error: ${response.status} ${response.statusText}`, 'error');
+                throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
             }
             
+            console.log('Parsing response JSON...');
             const data = await response.json();
-            console.log('Response data:', data);
+            console.log('Response data received:', data);
             
             if (data.response) {
+                console.log('Adding bot response to chat');
                 this.addMessage(data.response, false);
+                
+                // Display file analysis results if present
+                if (data.file_analyses && data.file_analyses.length > 0) {
+                    console.log('Displaying file analyses:', data.file_analyses.length);
+                    this.displayFileAnalyses(data.file_analyses);
+                }
                 
                 // Process session information if provided
                 if (data.session_info) {
@@ -436,26 +745,38 @@ class ChatBot {
                     this.currentModel = data.model_used;
                     document.getElementById('model-select').value = this.currentModel;
                 }
+                
+                // Clear attached files after successful send
+                console.log('Clearing attached files...');
+                this.attachedFiles = [];
+                this.updateAttachedFilesDisplay();
+                this.showNotification('✅ Message sent successfully!', 'success');
             } else {
+                console.error('No response content in data');
                 this.addMessage('⚠️ Sorry, I received an empty response. Please try again.', false);
             }
             
         } catch (error) {
+            console.error('=== SEND MESSAGE ERROR ===');
             console.error('Chat error details:', error);
             console.error('Error stack:', error.stack);
             this.addMessage(`⚠️ Error: ${error.message}. Please try again or check your connection.`, false);
             this.isConnected = false;
             this.updateConnectionStatus();
+            this.showNotification(`Error: ${error.message}`, 'error');
         } finally {
+            console.log('Resetting UI state...');
             // Reset button state
             sendButton.disabled = false;
-            sendButton.querySelector('.send-text').style.display = 'inline';
-            sendButton.querySelector('.send-loading').style.display = 'none';
+            const sendText = sendButton.querySelector('.send-text');
+            const sendLoading = sendButton.querySelector('.send-loading');
+            sendText.style.display = 'inline';
+            sendLoading.style.display = 'none';
+            sendLoading.textContent = '...';  // Reset loading text
             messageInput.focus();
+            console.log('=== SEND MESSAGE END ===');
         }
-    }
-
-    updateSessionInfo(sessionInfo) {
+    }    updateSessionInfo(sessionInfo) {
         console.log('Updating session info:', sessionInfo);
         
         if (sessionInfo.is_guest) {
@@ -507,6 +828,44 @@ class ChatBot {
                 }
             }
         }
+    }
+
+    displayFileAnalyses(fileAnalyses) {
+        console.log('Displaying file analyses:', fileAnalyses);
+        
+        const messagesContainer = document.getElementById('chat-messages');
+        
+        fileAnalyses.forEach(analysis => {
+            const analysisElement = document.createElement('div');
+            analysisElement.className = 'message file-analysis-message';
+            
+            let analysisContent = `
+                <div class="file-analysis-header">
+                    <span class="file-icon">${this.getFileIcon(analysis.type)}</span>
+                    <span class="file-name">${analysis.filename}</span>
+                    <span class="analysis-label">${analysis.type === 'image' ? 'Image Analysis' : 'Document Analysis'}</span>
+                </div>
+                <div class="file-analysis-content">
+                    ${this.formatMessage(analysis.analysis)}
+                </div>
+            `;
+            
+            // Add extracted text for documents if available
+            if (analysis.extracted_text && analysis.type === 'document') {
+                analysisContent += `
+                    <div class="extracted-text">
+                        <strong>Extracted Text Preview:</strong>
+                        <div class="extracted-text-content">${this.formatMessage(analysis.extracted_text)}</div>
+                    </div>
+                `;
+            }
+            
+            analysisElement.innerHTML = analysisContent;
+            messagesContainer.appendChild(analysisElement);
+        });
+        
+        // Scroll to bottom
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
     clearChat() {
