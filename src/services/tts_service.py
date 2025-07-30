@@ -162,19 +162,24 @@ class DualEnvironmentTTSService:
         text: str,
         language: str = "en",
         voice: str = "default",
-        speed: float = 1.0
+        speed: float = 1.0,
+        tts_mode: str = "fast"
     ) -> Dict[str, Any]:
         """
         Synthesize speech and return API-formatted response.
-        
-        Returns:
-            Dictionary with synthesis results for API consumption
+        Supports both fast and high-quality TTS modes.
         """
         start_time = time.time()
         
         try:
-            # Use existing synthesize_speech method
-            audio_data, content_type = await self.synthesize_speech(text, language, voice, speed)
+            if tts_mode == "fast":
+                # Use fast FFmpeg-based TTS for quick responses
+                logger.info("🚀 Using Fast TTS (Windows SAPI)")
+                audio_data, content_type = await self._fast_ffmpeg_tts(text, speed)
+            else:
+                # Use high-quality Coqui TTS for premium voices
+                logger.info("🎭 Using High-Quality TTS (Coqui Neural)")
+                audio_data, content_type = await self.synthesize_speech(text, language, voice, speed)
             
             # Encode audio as base64 for API response
             audio_base64 = base64.b64encode(audio_data).decode('utf-8')
@@ -187,7 +192,8 @@ class DualEnvironmentTTSService:
                 "processing_time": time.time() - start_time,
                 "language": language,
                 "voice": voice,
-                "speed": speed
+                "speed": speed,
+                "tts_mode": tts_mode
             }
             
         except Exception as e:
@@ -200,6 +206,84 @@ class DualEnvironmentTTSService:
                 "audio_data": None,
                 "processing_time": time.time() - start_time
             }
+    
+    async def _fast_ffmpeg_tts(self, text: str, speed: float = 1.0) -> Tuple[bytes, str]:
+        """
+        Fast TTS using Windows built-in SAPI voices via PowerShell.
+        Much faster than Coqui TTS (seconds vs minutes).
+        """
+        try:
+            # Create temporary file for audio output
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as audio_file:
+                audio_file_path = audio_file.name
+            
+            # Use Windows SAPI via PowerShell for fast TTS
+            # Escape quotes and handle special characters in text
+            escaped_text = text.replace("'", "''").replace('"', '""')
+            
+            powershell_cmd = f"""
+            Add-Type -AssemblyName System.Speech;
+            $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer;
+            $synth.Rate = {max(-10, min(10, int((speed - 1) * 10)))};
+            $synth.SetOutputToWaveFile('{audio_file_path}');
+            $synth.Speak('{escaped_text}');
+            $synth.Dispose();
+            """
+            
+            # Execute PowerShell command
+            process = await asyncio.create_subprocess_exec(
+                'powershell', '-Command', powershell_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                raise TTSError(f"PowerShell TTS failed: {stderr.decode()}")
+            
+            # Read generated audio
+            with open(audio_file_path, 'rb') as f:
+                audio_data = f.read()
+            
+            # Cleanup
+            os.unlink(audio_file_path)
+            
+            logger.info(f"Fast TTS generated {len(audio_data)} bytes of audio")
+            return audio_data, "audio/wav"
+            
+        except Exception as e:
+            logger.error(f"Fast TTS error: {e}")
+            # Fallback to simple silent audio
+            return await self._generate_simple_silence(), "audio/wav"
+    
+    async def _generate_simple_silence(self) -> bytes:
+        """Generate simple silence as fallback when TTS fails."""
+        # Create a minimal WAV file with 1 second of silence
+        sample_rate = 22050
+        duration = 1  # 1 second
+        samples = sample_rate * duration
+        
+        # Standard WAV header (44 bytes)
+        wav_header = bytearray()
+        wav_header.extend(b'RIFF')
+        wav_header.extend((36 + samples * 2).to_bytes(4, 'little'))
+        wav_header.extend(b'WAVE')
+        wav_header.extend(b'fmt ')
+        wav_header.extend((16).to_bytes(4, 'little'))
+        wav_header.extend((1).to_bytes(2, 'little'))  # PCM
+        wav_header.extend((1).to_bytes(2, 'little'))  # Mono
+        wav_header.extend(sample_rate.to_bytes(4, 'little'))
+        wav_header.extend((sample_rate * 2).to_bytes(4, 'little'))
+        wav_header.extend((2).to_bytes(2, 'little'))
+        wav_header.extend((16).to_bytes(2, 'little'))
+        wav_header.extend(b'data')
+        wav_header.extend((samples * 2).to_bytes(4, 'little'))
+        
+        # Silent audio data (all zeros)
+        audio_data = wav_header + b'\x00' * (samples * 2)
+        
+        return bytes(audio_data)
     
     async def get_supported_languages(self) -> Dict[str, Any]:
         """Get list of supported languages and voices."""
@@ -298,9 +382,9 @@ class CachedTTSService:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
     
-    def _get_cache_key(self, text: str, language: str, voice: str, speed: float) -> str:
+    def _get_cache_key(self, text: str, language: str, voice: str, speed: float, tts_mode: str = "fast") -> str:
         """Generate cache key for audio file."""
-        key_string = f"{text}_{language}_{voice}_{speed}"
+        key_string = f"{text}_{language}_{voice}_{speed}_{tts_mode}"
         return hashlib.md5(key_string.encode()).hexdigest()
     
     def is_available(self) -> bool:
@@ -311,7 +395,7 @@ class CachedTTSService:
             raise TTSError("TTS service not initialized")
             
         # Check cache first
-        cache_key = self._get_cache_key(text, language, voice, speed)
+        cache_key = self._get_cache_key(text, language, voice, speed, "legacy")
         cache_file = self.cache_dir / f"{cache_key}.wav"
         
         if cache_file.exists():
@@ -338,13 +422,12 @@ class CachedTTSService:
         text: str,
         language: str = "en",
         voice: str = "default",
-        speed: float = 1.0
+        speed: float = 1.0,
+        tts_mode: str = "fast"
     ) -> Dict[str, Any]:
         """
         Synthesize speech with caching and return API-formatted response.
-        
-        Returns:
-            Dictionary with synthesis results for API consumption
+        Supports both fast and high-quality TTS modes.
         """
         start_time = time.time()
         cache_hit = False
@@ -359,8 +442,8 @@ class CachedTTSService:
                     "processing_time": time.time() - start_time
                 }
             
-            # Check cache first
-            cache_key = self._get_cache_key(text, language, voice, speed)
+            # Check cache first (include tts_mode in cache key)
+            cache_key = self._get_cache_key(text, language, voice, speed, tts_mode)
             cache_file = self.cache_dir / f"{cache_key}.wav"
             
             if cache_file.exists():
@@ -369,18 +452,24 @@ class CachedTTSService:
                 cache_hit = True
                 content_type = "audio/wav"
             else:
-                # Generate new audio
-                audio_data, content_type = await self._service.synthesize_speech(text, language, voice, speed)
-                
-                # Cache the result
-                try:
-                    with open(cache_file, 'wb') as f:
-                        f.write(audio_data)
-                    logger.info(f"TTS audio cached: {cache_key}")
-                except Exception as e:
-                    logger.warning(f"Failed to cache TTS audio: {e}")
+                # Generate new audio using the specified TTS mode
+                audio_data, content_type = await self._service.synthesize_speech_api(text, language, voice, speed, tts_mode)
+                if audio_data.get("success"):
+                    # Decode base64 back to bytes for caching
+                    audio_bytes = base64.b64decode(audio_data["audio_data"])
+                    # Cache the result
+                    try:
+                        with open(cache_file, 'wb') as f:
+                            f.write(audio_bytes)
+                        logger.info(f"TTS audio cached: {cache_key} ({tts_mode} mode)")
+                    except Exception as e:
+                        logger.warning(f"Failed to cache TTS audio: {e}")
+                    
+                    return audio_data  # Return the API response directly
+                else:
+                    return audio_data  # Return the error response
             
-            # Encode audio as base64 for API response
+            # Encode cached audio as base64 for API response
             audio_base64 = base64.b64encode(audio_data).decode('utf-8')
             
             return {
@@ -392,6 +481,7 @@ class CachedTTSService:
                 "language": language,
                 "voice": voice,
                 "speed": speed,
+                "tts_mode": tts_mode,
                 "cache_hit": cache_hit
             }
             
@@ -448,7 +538,7 @@ class TTSService:
         """Get TTS service health status (alias for health_check)."""
         return await self.health_check()
     
-    async def synthesize_speech_api(self, text: str, language: str = "en", voice: str = "default", speed: float = 1.0):
+    async def synthesize_speech_api(self, text: str, language: str = "en", voice: str = "default", speed: float = 1.0, tts_mode: str = "fast"):
         """API wrapper for synthesize_speech."""
         if not self._service:
             return {
@@ -458,7 +548,7 @@ class TTSService:
                 "audio_data": None,
                 "processing_time": 0
             }
-        return await self._service.synthesize_speech_api(text, language, voice, speed)
+        return await self._service.synthesize_speech_api(text, language, voice, speed, tts_mode)
 
 # Global TTS service instances
 tts_service = DualEnvironmentTTSService()
@@ -466,5 +556,3 @@ cached_tts_service = CachedTTSService()
 
 # Connect the services
 cached_tts_service._service = tts_service
-
-print("TTS Service is running. Access the test page at http://localhost:8000/tts_test.html")

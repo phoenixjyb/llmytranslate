@@ -97,43 +97,68 @@ class OllamaClient:
         self,
         message: str,
         model: str = None,
-        stream: bool = False,
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Chat completion wrapper around the generate method for voice chat compatibility.
+        Simple chat completion for voice chat - direct Ollama API call using requests.
         """
+        start_time = time.time()
+        logger.info(f"🔵 chat_completion called with message: '{message[:50]}...'")
+        print(f"🔵 OLLAMA DEBUG: chat_completion called with message: '{message[:50]}...'")
+        
         try:
             if model is None:
                 model = self.model_name
                 
-            response = await self.generate(
-                model=model,
-                prompt=message,
-                options=kwargs.get("options", {}),
-                stream=stream
-            )
+            logger.info(f"🔵 Using model: {model}, base_url: {self.base_url}")
+            print(f"🔵 OLLAMA DEBUG: Using model: {model}, base_url: {self.base_url}")
             
-            if response and "response" in response:
+            # Use requests library like other working methods
+            url = f"{self.base_url}/api/generate"
+            payload = {
+                "model": model,
+                "prompt": message,
+                "stream": False,
+                "options": {
+                    "temperature": kwargs.get("temperature", 0.7),
+                    "top_p": 0.9,
+                    "num_predict": kwargs.get("max_tokens", 1000)
+                }
+            }
+            
+            # Make direct HTTP call using requests
+            logger.info(f"🔵 Making POST request to: {url}")
+            print(f"🔵 OLLAMA DEBUG: Making POST request to: {url}")
+            response = requests.post(url, json=payload, timeout=90.0)  # Increased timeout to 90 seconds for queuing
+            processing_time = time.time() - start_time
+            logger.info(f"🔵 Request completed in {processing_time:.3f}s, status: {response.status_code}")
+            print(f"🔵 OLLAMA DEBUG: Request completed in {processing_time:.3f}s, status: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"🔵 Response received: {len(result.get('response', ''))} chars")
+                print(f"🔵 OLLAMA DEBUG: Response received: {len(result.get('response', ''))} chars")
                 return {
                     "success": True,
-                    "response": response["response"],
-                    "model": model,
-                    "processing_time": response.get("total_duration", 0) / 1_000_000_000 if response.get("total_duration") else 0
+                    "response": result.get("response", ""),
+                    "model_used": model,
+                    "processing_time": processing_time
                 }
             else:
+                logger.error(f"Ollama API error: {response.status_code} - {response.text}")
                 return {
                     "success": False,
-                    "error": "No response from Ollama",
-                    "response": ""
+                    "error": f"Ollama API error: {response.status_code}",
+                    "processing_time": processing_time
                 }
                 
         except Exception as e:
-            logger.error(f"Chat completion failed: {e}")
+            processing_time = time.time() - start_time
+            logger.error(f"Chat completion error: {e}")
             return {
                 "success": False,
                 "error": str(e),
-                "response": ""
+                "processing_time": processing_time
             }
     
     async def generate_translation(

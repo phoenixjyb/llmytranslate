@@ -351,11 +351,42 @@
                 <div class="control-group">
                     <label class="control-label" for="modelSelect">AI Model:</label>
                     <select class="control-input" id="modelSelect">
-                        <option value="llama3.2">Llama 3.2</option>
-                        <option value="llama3.1">Llama 3.1</option>
-                        <option value="qwen2.5">Qwen 2.5</option>
-                        <option value="gemma2">Gemma 2</option>
+                        <option value="gemma3:latest" selected>Gemma 3 (Default)</option>
+                        <option value="llama3.1:8b">Llama 3.1 8B</option>
+                        <option value="gemma3:latest">Gemma 3 Latest</option>
+                        <option value="llava:latest">Llava Latest</option>
                     </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="ttsMode">Voice Quality:</label>
+                    <select class="control-input" id="ttsMode">
+                        <option value="fast">⚡ Fast TTS (1-3s, Windows SAPI)</option>
+                        <option value="high-quality">🎭 High Quality (30-60s, Neural TTS)</option>
+                    </select>
+                    <small>Fast: Quick responses, good quality. High Quality: Slow but premium voices.</small>
+                </div>
+            </div>
+
+            <!-- Fallback text input for when microphone fails -->
+            <div class="fallback-panel" id="fallbackPanel" style="display: block;">
+                <h3 style="color: #666; margin-bottom: 15px;">� Text Chat Alternative</h3>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <input type="text" id="textInput" placeholder="Type your message here..." 
+                           style="flex: 1; padding: 15px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px;" />
+                    <button onclick="sendTextMessage()" 
+                            style="padding: 15px 25px; background: #4CAF50; color: white; border: none; border-radius: 10px; cursor: pointer;">
+                        Send
+                    </button>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button onclick="testMicrophone()" 
+                            style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                        🎤 Test Microphone
+                    </button>
+                    <button onclick="showMicrophoneHelp()" 
+                            style="padding: 10px 20px; background: #FF9800; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                        📋 Setup Help
+                    </button>
                 </div>
             </div>
 
@@ -456,13 +487,22 @@
 
         // Convert base64 to blob
         function base64ToBlob(base64, contentType) {
-            const byteCharacters = atob(base64);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            if (!base64 || !contentType) {
+                throw new Error('Invalid base64 or contentType');
             }
-            const byteArray = new Uint8Array(byteNumbers);
-            return new Blob([byteArray], { type: contentType });
+            
+            try {
+                const byteCharacters = atob(base64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                return new Blob([byteArray], { type: contentType });
+            } catch (error) {
+                console.error('Error converting base64 to blob:', error);
+                throw new Error('Failed to convert audio data');
+            }
         }
 
         // Process voice conversation
@@ -478,6 +518,7 @@
                 formData.append('voice', 'default');
                 formData.append('speed', document.getElementById('voiceSpeed').value);
                 formData.append('model', document.getElementById('modelSelect').value);
+                formData.append('tts_mode', document.getElementById('ttsMode').value);
                 
                 // Send to voice chat API
                 const response = await fetch('/api/voice-chat/conversation', {
@@ -490,27 +531,47 @@
                 }
                 
                 const result = await response.json();
+                console.log('Voice chat API response:', result);
                 
-                if (!result.success) {
+                if (result.success) {
+                    // Add user message to conversation
+                    addConversationItem('user', result.text_input || 'Voice input');
+                    
+                    // Add AI response to conversation with audio (if available)
+                    let audioBlob = null;
+                    if (result.audio_base64 && result.content_type) {
+                        try {
+                            audioBlob = base64ToBlob(result.audio_base64, result.content_type);
+                        } catch (audioError) {
+                            console.error('Error creating audio blob:', audioError);
+                            // Continue without audio
+                        }
+                    }
+                    
+                    addConversationItem('ai', result.text_response || 'AI response', audioBlob);
+                    
+                    // Auto-play AI response
+                    setTimeout(() => {
+                        const lastAudio = document.querySelector('.conversation-item:last-child audio');
+                        if (lastAudio) {
+                            lastAudio.play();
+                        }
+                    }, 500);
+                    
+                    // Show detailed timing breakdown
+                    const timingInfo = `
+                        📊 Performance Breakdown:
+                        • Speech-to-Text: ${result.stt_time?.toFixed(1) || 0}s
+                        • LLM Processing: ${result.llm_time?.toFixed(1) || 0}s  
+                        • Text-to-Speech: ${result.tts_time?.toFixed(1) || 0}s (${result.tts_mode || 'fast'} mode)
+                        • Total: ${result.processing_time?.toFixed(1) || 0}s
+                    `;
+                    console.log(timingInfo);
+                    
+                    updateStatus(`✅ Conversation completed in ${result.processing_time?.toFixed(1) || 0}s (STT: ${result.stt_time?.toFixed(1) || 0}s, LLM: ${result.llm_time?.toFixed(1) || 0}s, TTS: ${result.tts_time?.toFixed(1) || 0}s ${result.tts_mode ? '[' + result.tts_mode + ']' : ''})`, 'status-ready');
+                } else {
                     throw new Error(result.error || 'Voice conversation failed');
                 }
-                
-                // Add user message to conversation
-                addConversationItem('user', result.text_input);
-                
-                // Add AI response to conversation with audio
-                const audioBlob = base64ToBlob(result.audio_base64, result.content_type);
-                addConversationItem('ai', result.text_response, audioBlob);
-                
-                // Auto-play AI response
-                setTimeout(() => {
-                    const lastAudio = document.querySelector('.conversation-item:last-child audio');
-                    if (lastAudio) {
-                        lastAudio.play();
-                    }
-                }, 500);
-                
-                updateStatus(`✅ Conversation completed in ${result.processing_time.toFixed(1)}s`, 'status-ready');
                 updateMicButton('');
                 conversationCount++;
                 
@@ -518,6 +579,9 @@
                 console.error('Voice conversation error:', error);
                 updateStatus(`❌ Error: ${error.message}`, 'status-error');
                 updateMicButton('');
+            } finally {
+                // Reset processing flag to allow new recordings
+                isProcessing = false;
             }
         }
 
@@ -562,7 +626,31 @@
                     
                 } catch (error) {
                     console.error('Error accessing microphone:', error);
-                    updateStatus('❌ Could not access microphone. Please check permissions.', 'status-error');
+                    let errorMessage = '❌ Microphone access failed. ';
+                    
+                    if (error.name === 'NotAllowedError') {
+                        errorMessage += 'Permission denied. Click the 🔒 icon in your browser and allow microphone access.';
+                    } else if (error.name === 'NotFoundError') {
+                        errorMessage += 'No microphone found. Please connect a microphone.';
+                    } else if (error.name === 'NotSupportedError') {
+                        errorMessage += 'Microphone not supported by this browser.';
+                    } else if (error.name === 'SecurityError') {
+                        errorMessage += 'HTTPS required for microphone access in most browsers.';
+                    } else {
+                        errorMessage += `${error.name}: ${error.message}`;
+                    }
+                    
+                    updateStatus(errorMessage, 'status-error');
+                    
+                    // Show fallback panel immediately
+                    document.getElementById('fallbackPanel').style.display = 'block';
+                    
+                    // Show additional help
+                    setTimeout(() => {
+                        if (confirm('Would you like to see detailed instructions for enabling microphone access?')) {
+                            showMicrophoneHelp();
+                        }
+                    }, 2000);
                 }
             } else {
                 // Stop recording
@@ -579,12 +667,139 @@
             window.location.href = '/';
         }
 
+        // Show detailed microphone help
+        function showMicrophoneHelp() {
+            const helpText = `
+🎤 MICROPHONE SETUP HELP
+
+📍 For Chrome/Edge:
+1. Look for the 🔒 or 🎤 icon in the address bar
+2. Click it and select "Allow" for microphone
+3. If blocked, click "Site settings" and change microphone to "Allow"
+
+📍 For Firefox:
+1. Look for the microphone icon in the address bar
+2. Click "Allow" when prompted
+3. If blocked, click the shield icon and enable microphone
+
+📍 For all browsers:
+• Make sure your microphone is connected and working
+• Try refreshing the page after granting permission
+• Use HTTPS (https://) for better compatibility
+• Check your system microphone settings
+
+📍 Test your microphone:
+• Go to your browser settings > Privacy & Security > Site Settings > Microphone
+• Make sure this site is allowed to use your microphone
+
+🔄 After fixing permissions, refresh this page and try again!
+            `;
+            alert(helpText);
+        }
+
+        // Test microphone access
+        async function testMicrophone() {
+            updateStatus('🔍 Testing microphone access...', 'status-processing');
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    } 
+                });
+                
+                // Success! Stop the stream and show success message
+                stream.getTracks().forEach(track => track.stop());
+                updateStatus('✅ Microphone test successful! You can now use voice chat.', 'status-success');
+                document.getElementById('fallbackPanel').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Microphone test failed:', error);
+                let errorMessage = '❌ Microphone test failed: ';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage += 'Permission denied. Please allow microphone access.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage += 'No microphone found.';
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                updateStatus(errorMessage, 'status-error');
+                document.getElementById('fallbackPanel').style.display = 'block';
+            }
+        }
+
+        // Send text message as fallback
+        async function sendTextMessage() {
+            const textInput = document.getElementById('textInput');
+            const message = textInput.value.trim();
+            
+            if (!message) {
+                alert('Please type a message first!');
+                return;
+            }
+            
+            textInput.value = '';
+            updateStatus('💬 Processing text message...', 'status-processing');
+            
+            try {
+                // Add user message to conversation
+                addConversationItem('user', message);
+                
+                // Use ultra-simple JSON endpoint
+                const response = await fetch('/api/voice-chat/simple-chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        model: document.getElementById('modelSelect').value || 'gemma3:latest'
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server error ${response.status}: ${errorText}`);
+                }
+                
+                const result = await response.json();
+                console.log('Simple chat API response:', result);
+                
+                if (result.success && result.response) {
+                    // Add AI response to conversation
+                    addConversationItem('ai', result.response);
+                    updateStatus('✅ Message sent successfully!', 'status-success');
+                } else {
+                    throw new Error(result.error || 'No response received from AI');
+                }
+                
+            } catch (error) {
+                console.error('Text message error:', error);
+                updateStatus(`❌ Error: ${error.message}`, 'status-error');
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             checkBrowserSupport();
             
             // Add welcome message
-            addConversationItem('ai', 'Hello! I\'m ready for voice conversation. Click the microphone and start speaking!');
+            addConversationItem('ai', 'Hello! I\'m ready for voice conversation. Click the microphone and start speaking, or use the text chat below!');
+            
+            // Always show text chat for testing
+            console.log('Voice chat page loaded');
+            document.getElementById('fallbackPanel').style.display = 'block';
+            
+            // Test if we have microphone access
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                console.log('MediaDevices API is available');
+            } else {
+                console.log('MediaDevices API not available');
+            }
         });
 
         // Keyboard shortcuts
@@ -592,6 +807,12 @@
             if (event.code === 'Space' && !event.target.matches('input, textarea, select')) {
                 event.preventDefault();
                 toggleVoiceChat();
+            }
+            
+            // Enter key in text input
+            if (event.code === 'Enter' && event.target.id === 'textInput') {
+                event.preventDefault();
+                sendTextMessage();
             }
         });
     </script>

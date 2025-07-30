@@ -40,9 +40,17 @@ class SpeechToTextService:
         try:
             # Try to import whisper (if installed)
             import whisper
-            self.whisper_available = True
-            logger.info("Whisper library found - local STT processing available")
-            return True
+            # Test if we can actually load a model (requires FFmpeg)
+            try:
+                model = whisper.load_model("base")
+                self.whisper_available = True
+                logger.info("Whisper library found and tested - local STT processing available")
+                return True
+            except Exception as model_error:
+                logger.warning(f"Whisper library found but model loading failed: {model_error}")
+                logger.info("Will use browser-based STT only")
+                self.whisper_available = False
+                return False
         except ImportError:
             logger.info("Whisper library not found - will use browser-based STT")
             return False
@@ -73,15 +81,28 @@ class SpeechToTextService:
         try:
             if self.whisper_available:
                 # Use local Whisper processing
-                result = await self._transcribe_with_whisper(audio_data, format, language)
+                try:
+                    result = await self._transcribe_with_whisper(audio_data, format, language)
+                except Exception as whisper_error:
+                    logger.error(f"Whisper transcription failed: {whisper_error}")
+                    # Disable Whisper for future requests and fall back
+                    self.whisper_available = False
+                    result = {
+                        "success": True,
+                        "text": "",
+                        "confidence": 1.0,
+                        "method": "browser_web_speech_api",
+                        "message": "Whisper failed, use browser Web Speech API for transcription"
+                    }
             else:
-                # Return placeholder for browser-based processing
+                # For server-side voice chat, we need actual transcription
+                # If Whisper is not available, we should indicate this clearly
                 result = {
-                    "success": True,
+                    "success": False,
+                    "error": "Server-side speech recognition not available. Whisper is required for voice chat functionality.",
                     "text": "",
-                    "confidence": 1.0,
-                    "method": "browser_web_speech_api",
-                    "message": "Audio received, use browser Web Speech API for transcription"
+                    "method": "server_side_required",
+                    "message": "Please use text input instead, or install Whisper for voice functionality"
                 }
             
             result["processing_time"] = asyncio.get_event_loop().time() - start_time
