@@ -15,6 +15,7 @@ from .core.config import get_settings
 from .core.network import NetworkManager
 from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management, file_upload, tts
 from .api.routes import voice_chat as voice_chat_routes
+from .api.routes import phone_call as phone_call_routes
 
 # Mock logger
 class MockLogger:
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
     app.include_router(file_upload.router)  # Add file upload and processing routes
     app.include_router(tts.router, prefix="/api")  # Add TTS routes
     app.include_router(voice_chat_routes.router)  # Add voice chat routes
+    app.include_router(phone_call_routes.router)  # Add phone call routes
     
     # Mount static files for web interface BEFORE other routes
     web_dir = Path(__file__).parent.parent / "web"
@@ -228,6 +230,24 @@ def create_app() -> FastAPI:
                 <h1>Voice Chat Interface Not Found</h1>
                 <p>The voice-chat.html file is missing. Please ensure the web interface is properly installed.</p>
                 <p><a href="/web/voice-chat.html">Try /web/voice-chat.html</a> | <a href="/">Go to Main Page</a></p>
+            </body></html>
+            """, status_code=404)
+    
+    # Serve phone call interface
+    @app.get("/phone-call", response_class=HTMLResponse)
+    async def phone_call():
+        web_dir = Path(__file__).parent.parent / "web"
+        phone_call_html = web_dir / "phone-call.html"
+        
+        if phone_call_html.exists():
+            return HTMLResponse(content=phone_call_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <!DOCTYPE html><html><head><title>Phone Call Not Found</title></head>
+            <body style="font-family: Arial, sans-serif; text-align: center; margin: 50px;">
+                <h1>Phone Call Interface Not Found</h1>
+                <p>The phone-call.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/web/phone-call.html">Try /web/phone-call.html</a> | <a href="/">Go to Main Page</a></p>
             </body></html>
             """, status_code=404)
     

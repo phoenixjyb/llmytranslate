@@ -1,0 +1,17 @@
+# Additional requirements for phone call mode real-time features
+# These are optional but recommended for better performance
+
+# Voice Activity Detection (VAD)
+webrtcvad>=2.0.10
+
+# Audio processing and filtering
+scipy>=1.11.0
+
+# WebSocket dependencies (should already be available via FastAPI)
+websockets>=11.0.0
+
+# Audio utilities
+pydub>=0.25.1
+
+# For faster numpy operations
+numpy>=1.24.0

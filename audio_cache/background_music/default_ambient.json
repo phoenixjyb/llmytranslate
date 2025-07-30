@@ -1,0 +1,9 @@
+{
+  "name": "Gentle Ambient",
+  "duration": 30.0,
+  "type": "ambient",
+  "description": "Soft ambient tones for background",
+  "audio_data": null,
+  "format": "mp3",
+  "volume": 0.3
+}

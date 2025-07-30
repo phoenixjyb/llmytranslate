@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Call - LLMy Services</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #ff8a00 0%, #e52e71 100%);
+            min-height: 100vh;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .return-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .return-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+        }
+
+        .phone-interface {
+            background: white;
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+            text-align: center;
+            position: relative;
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .phone-header {
+            margin-bottom: 30px;
+        }
+
+        .phone-title {
+            font-size: 2.5rem;
+            color: #ff8a00;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .phone-subtitle {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .call-status {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #ff8a00;
+        }
+
+        .status-text {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #ff8a00;
+            margin-bottom: 5px;
+        }
+
+        .status-details {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .call-timer {
+            font-family: 'Courier New', monospace;
+            font-size: 1.5rem;
+            color: #333;
+            margin: 10px 0;
+        }
+
+        .phone-controls {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 30px 0;
+        }
+
+        .control-button {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .dial-button {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+
+        .dial-button:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 12px 30px rgba(40, 167, 69, 0.4);
+        }
+
+        .hangup-button {
+            background: linear-gradient(135deg, #dc3545 0%, #e91e63 100%);
+            color: white;
+        }
+
+        .hangup-button:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 12px 30px rgba(220, 53, 69, 0.4);
+        }
+
+        .interrupt-button {
+            background: linear-gradient(135deg, #ffc107 0%, #ff8a00 100%);
+            color: white;
+        }
+
+        .interrupt-button:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 12px 30px rgba(255, 193, 7, 0.4);
+        }
+
+        .control-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .settings-panel {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+            height: fit-content;
+        }
+
+        .settings-title {
+            font-size: 1.4rem;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .setting-group {
+            margin-bottom: 20px;
+        }
+
+        .setting-label {
+            display: block;
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .setting-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .setting-input:focus {
+            outline: none;
+            border-color: #ff8a00;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #ff8a00;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .call-history {
+            margin-top: 30px;
+        }
+
+        .history-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 3px solid #ff8a00;
+        }
+
+        .history-time {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .history-duration {
+            font-size: 0.9rem;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .conversation-display {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+        }
+
+        .message {
+            margin: 10px 0;
+        }
+
+        .user-message {
+            color: #0066cc;
+            font-weight: 500;
+        }
+
+        .ai-message {
+            color: #ff8a00;
+            font-weight: 500;
+        }
+
+        .loading-indicator {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .loading-dots {
+            display: inline-block;
+            position: relative;
+            width: 80px;
+            height: 80px;
+        }
+
+        .loading-dots div {
+            position: absolute;
+            top: 33px;
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: #ff8a00;
+            animation-timing-function: cubic-bezier(0, 1, 1, 0);
+        }
+
+        .loading-dots div:nth-child(1) {
+            left: 8px;
+            animation: loading1 0.6s infinite;
+        }
+
+        .loading-dots div:nth-child(2) {
+            left: 8px;
+            animation: loading2 0.6s infinite;
+        }
+
+        .loading-dots div:nth-child(3) {
+            left: 32px;
+            animation: loading2 0.6s infinite;
+        }
+
+        .loading-dots div:nth-child(4) {
+            left: 56px;
+            animation: loading3 0.6s infinite;
+        }
+
+        @keyframes loading1 {
+            0% { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes loading3 {
+            0% { transform: scale(1); }
+            100% { transform: scale(0); }
+        }
+
+        @keyframes loading2 {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(24px, 0); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .phone-interface {
+                padding: 30px 20px;
+            }
+            
+            .phone-title {
+                font-size: 2rem;
+            }
+            
+            .control-button {
+                width: 70px;
+                height: 70px;
+                font-size: 1.5rem;
+            }
+            
+            .phone-controls {
+                gap: 20px;
+            }
+        }
+
+        /* Status-specific styles */
+        .status-idle .status-text { color: #6c757d; }
+        .status-dialing .status-text { color: #ffc107; }
+        .status-connected .status-text { color: #28a745; }
+        .status-ended .status-text { color: #dc3545; }
+
+        /* Animation for ringing */
+        .status-dialing .phone-interface {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">📞 Phone Call</div>
+            <a href="/" class="return-btn">
+                ← Back to Services
+            </a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="phone-interface">
+            <div class="phone-header">
+                <h1 class="phone-title">AI Phone Call</h1>
+                <p class="phone-subtitle">Have a natural conversation with AI, just like a real phone call!</p>
+            </div>
+
+            <div class="call-status status-idle" id="callStatus">
+                <div class="status-text" id="statusText">Ready to dial</div>
+                <div class="status-details" id="statusDetails">Click the dial button to start your call</div>
+                <div class="call-timer" id="callTimer">00:00</div>
+            </div>
+
+            <div class="conversation-display" id="conversationDisplay" style="display: none;">
+                <div id="conversationMessages"></div>
+            </div>
+
+            <div class="loading-indicator" id="loadingIndicator">
+                <div class="loading-dots">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                </div>
+                <p>AI is thinking...</p>
+            </div>
+
+            <div class="phone-controls">
+                <button class="control-button dial-button" id="dialButton" title="Start Call">
+                    📞
+                </button>
+                <button class="control-button interrupt-button" id="interruptButton" title="Interrupt AI" disabled>
+                    ⏸️
+                </button>
+                <button class="control-button hangup-button" id="hangupButton" title="End Call" disabled>
+                    📵
+                </button>
+            </div>
+        </div>
+
+        <div class="settings-panel">
+            <h3 class="settings-title">Call Settings</h3>
+            
+            <div class="setting-group">
+                <label class="setting-label">Language</label>
+                <select class="setting-input" id="languageSelect">
+                    <option value="en">English</option>
+                    <option value="zh">中文 (Chinese)</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">AI Model</label>
+                <select class="setting-input" id="modelSelect">
+                    <option value="gemma3:1b">Gemma 3 1B (Fast)</option>
+                    <option value="gemma3:latest">Gemma 3 (Balanced)</option>
+                    <option value="phi3.5:latest">Phi 3.5 (Quality)</option>
+                    <option value="llama3.2:latest">Llama 3.2 (Advanced)</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">Voice Speed</label>
+                <select class="setting-input" id="speedSelect">
+                    <option value="0.8">Slow</option>
+                    <option value="1.0" selected>Normal</option>
+                    <option value="1.2">Fast</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">
+                    Kid-Friendly Mode
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="kidFriendlyToggle">
+                        <span class="slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">
+                    Background Music
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="backgroundMusicToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div class="call-history">
+                <h4 class="settings-title">Recent Calls</h4>
+                <div id="callHistoryList">
+                    <div class="history-item">
+                        <div class="history-time">Today, 2:30 PM</div>
+                        <div class="history-duration">Duration: 03:45</div>
+                    </div>
+                    <div class="history-item">
+                        <div class="history-time">Yesterday, 10:15 AM</div>
+                        <div class="history-duration">Duration: 01:22</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class PhoneCallInterface {
+            constructor() {
+                this.callState = 'idle'; // idle, dialing, connected, ended
+                this.callTimer = null;
+                this.callStartTime = null;
+                this.currentSessionId = null;
+                this.websocket = null;
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.currentAudio = null; // Track current AI audio for interrupts
+                this.backgroundAudio = null; // Track background music
+                
+                this.initializeElements();
+                this.setupEventListeners();
+                this.setupAudioPermissions();
+            }
+
+            initializeElements() {
+                this.dialButton = document.getElementById('dialButton');
+                this.hangupButton = document.getElementById('hangupButton');
+                this.interruptButton = document.getElementById('interruptButton');
+                this.statusText = document.getElementById('statusText');
+                this.statusDetails = document.getElementById('statusDetails');
+                this.callTimerDisplay = document.getElementById('callTimer');
+                this.conversationDisplay = document.getElementById('conversationDisplay');
+                this.conversationMessages = document.getElementById('conversationMessages');
+                this.loadingIndicator = document.getElementById('loadingIndicator');
+                this.callStatus = document.getElementById('callStatus');
+                
+                // Settings
+                this.languageSelect = document.getElementById('languageSelect');
+                this.modelSelect = document.getElementById('modelSelect');
+                this.speedSelect = document.getElementById('speedSelect');
+                this.kidFriendlyToggle = document.getElementById('kidFriendlyToggle');
+                this.backgroundMusicToggle = document.getElementById('backgroundMusicToggle');
+            }
+
+            setupEventListeners() {
+                this.dialButton.addEventListener('click', () => this.startCall());
+                this.hangupButton.addEventListener('click', () => this.endCall());
+                this.interruptButton.addEventListener('click', () => this.interruptAI());
+                
+                // Settings change handlers
+                this.languageSelect.addEventListener('change', () => this.updateSettings());
+                this.modelSelect.addEventListener('change', () => this.updateSettings());
+                this.speedSelect.addEventListener('change', () => this.updateSettings());
+                this.kidFriendlyToggle.addEventListener('change', () => this.updateSettings());
+                this.backgroundMusicToggle.addEventListener('change', () => this.updateSettings());
+            }
+
+            async setupAudioPermissions() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
+                    console.log('Audio permissions granted');
+                } catch (error) {
+                    console.error('Audio permissions denied:', error);
+                    this.updateStatus('error', 'Microphone access required for phone calls');
+                }
+            }
+
+            async startCall() {
+                try {
+                    this.updateCallState('dialing');
+                    this.currentSessionId = this.generateSessionId();
+                    
+                    // Request microphone access
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                    // Setup WebSocket connection
+                    await this.setupWebSocket();
+                    
+                    // Start audio recording
+                    this.setupAudioRecording(stream);
+                    
+                    this.updateCallState('connected');
+                    this.startCallTimer();
+                    
+                    this.conversationDisplay.style.display = 'block';
+                    this.addMessage('system', 'Call connected! Start speaking...');
+                    
+                } catch (error) {
+                    console.error('Failed to start call:', error);
+                    this.updateStatus('error', 'Failed to start call: ' + error.message);
+                    this.updateCallState('idle');
+                }
+            }
+
+            async setupWebSocket() {
+                return new Promise((resolve, reject) => {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/api/phone/stream`;
+                    
+                    this.websocket = new WebSocket(wsUrl);
+                    
+                    this.websocket.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.websocket.send(JSON.stringify({
+                            type: 'session_start',
+                            session_id: this.currentSessionId,
+                            settings: this.getCallSettings()
+                        }));
+                        resolve();
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        this.handleWebSocketMessage(JSON.parse(event.data));
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        reject(error);
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        console.log('WebSocket disconnected');
+                        if (this.callState === 'connected') {
+                            this.endCall();
+                        }
+                    };
+                });
+            }
+
+            setupAudioRecording(stream) {
+                this.mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+
+                this.mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        this.audioChunks.push(event.data);
+                    }
+                };
+
+                this.mediaRecorder.onstop = () => {
+                    if (this.audioChunks.length > 0) {
+                        const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                        this.sendAudioData(audioBlob);
+                        this.audioChunks = [];
+                    }
+                };
+
+                // Record in shorter chunks for more responsive processing
+                this.mediaRecorder.start();
+                this.recordingInterval = setInterval(() => {
+                    if (this.mediaRecorder.state === 'recording') {
+                        this.mediaRecorder.stop();
+                        this.mediaRecorder.start();
+                    }
+                }, 2000); // Send audio every 2 seconds for better responsiveness
+            }
+
+            sendAudioData(audioBlob) {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const audioData = reader.result.split(',')[1]; // Remove data URL prefix
+                        this.websocket.send(JSON.stringify({
+                            type: 'audio_data',
+                            session_id: this.currentSessionId,
+                            audio: audioData,
+                            timestamp: Date.now()
+                        }));
+                    };
+                    reader.readAsDataURL(audioBlob);
+                }
+            }
+
+            handleWebSocketMessage(data) {
+                switch (data.type) {
+                    case 'transcription':
+                        this.addMessage('user', data.text);
+                        this.showLoading(true);
+                        if (data.processing_time) {
+                            console.log(`STT processing time: ${data.processing_time.toFixed(2)}s`);
+                        }
+                        break;
+                        
+                    case 'ai_response':
+                        this.showLoading(false);
+                        this.addMessage('ai', data.text);
+                        if (data.audio) {
+                            this.playAudioResponse(data.audio);
+                        }
+                        if (data.timing) {
+                            console.log(`AI processing times:`, data.timing);
+                        }
+                        break;
+                        
+                    case 'ai_message':
+                        // Phase 3: Handle AI messages (like kid-friendly greetings)
+                        this.addMessage('ai', data.message);
+                        break;
+                        
+                    case 'background_music':
+                        if (this.getCallSettings().background_music) {
+                            this.playBackgroundMusic(data.audio, data.volume || 0.3);
+                        }
+                        break;
+                        
+                    case 'interrupt':
+                    case 'interrupt_confirmed':
+                        // Phase 3: Handle interrupt confirmations
+                        this.stopCurrentAudio();
+                        this.stopBackgroundMusic();
+                        this.showLoading(false);
+                        this.updateStatus('success', data.message || 'AI interrupted');
+                        break;
+                        
+                    case 'session_ended':
+                        // Phase 3: Handle enhanced session end with summary
+                        this.showLoading(false);
+                        if (data.call_summary) {
+                            this.addMessage('system', 
+                                `Call ended. Duration: ${data.call_summary.duration}, Messages: ${data.call_summary.messages_exchanged}`
+                            );
+                        }
+                        this.updateStatus('success', data.message);
+                        break;
+                        
+                    case 'error':
+                        this.showLoading(false);
+                        this.addMessage('system', 'Error: ' + data.message);
+                        break;
+                        
+                    case 'status':
+                        this.updateStatus('info', data.message);
+                        // Phase 3: Handle kid-friendly mode confirmation
+                        if (data.kid_friendly_mode !== undefined) {
+                            const toggle = document.getElementById('kidFriendlyToggle');
+                            if (toggle) {
+                                toggle.checked = data.kid_friendly_mode;
+                            }
+                            if (data.kid_friendly_mode) {
+                                this.addMessage('system', '👶 Kid-friendly mode enabled');
+                            }
+                        }
+                        break;
+                }
+            }
+
+            playAudioResponse(audioBase64) {
+                try {
+                    // Stop any existing background music
+                    this.stopBackgroundMusic();
+                    
+                    const audio = new Audio('data:audio/wav;base64,' + audioBase64);
+                    audio.volume = 1.0; // Full volume for AI response
+                    
+                    audio.play().catch(error => {
+                        console.error('Failed to play AI audio response:', error);
+                        this.addMessage('system', 'Audio playback failed - check browser permissions');
+                    });
+                    
+                    // Track current audio for interrupt functionality
+                    this.currentAudio = audio;
+                    
+                    audio.onended = () => {
+                        this.currentAudio = null;
+                    };
+                } catch (error) {
+                    console.error('Error creating audio element:', error);
+                }
+            }
+
+            playBackgroundMusic(audioBase64, volume = 0.3) {
+                try {
+                    // Stop any existing background music
+                    this.stopBackgroundMusic();
+                    
+                    const audio = new Audio('data:audio/wav;base64,' + audioBase64);
+                    audio.volume = volume;
+                    audio.loop = true; // Loop background music
+                    
+                    audio.play().catch(error => {
+                        console.log('Background music playback failed (this is normal):', error);
+                    });
+                    
+                    this.backgroundAudio = audio;
+                } catch (error) {
+                    console.log('Background music error (this is normal):', error);
+                }
+            }
+
+            stopBackgroundMusic() {
+                if (this.backgroundAudio) {
+                    this.backgroundAudio.pause();
+                    this.backgroundAudio.currentTime = 0;
+                    this.backgroundAudio = null;
+                }
+            }
+
+            // Phase 3: Stop current AI audio (for interrupts)
+            stopCurrentAudio() {
+                if (this.currentAudio) {
+                    this.currentAudio.pause();
+                    this.currentAudio.currentTime = 0;
+                    this.currentAudio = null;
+                }
+            }
+
+            endCall() {
+                this.updateCallState('ended');
+                
+                // Clean up resources
+                if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+                    this.mediaRecorder.stop();
+                }
+                
+                if (this.recordingInterval) {
+                    clearInterval(this.recordingInterval);
+                }
+                
+                if (this.websocket) {
+                    this.websocket.send(JSON.stringify({
+                        type: 'session_end',
+                        session_id: this.currentSessionId
+                    }));
+                    this.websocket.close();
+                }
+                
+                this.stopCallTimer();
+                
+                // Reset UI after a delay
+                setTimeout(() => {
+                    this.updateCallState('idle');
+                    this.conversationDisplay.style.display = 'none';
+                    this.conversationMessages.innerHTML = '';
+                }, 3000);
+                
+                this.saveCallToHistory();
+            }
+
+            interruptAI() {
+                // Stop current AI audio playback
+                if (this.currentAudio) {
+                    this.currentAudio.pause();
+                    this.currentAudio.currentTime = 0;
+                    this.currentAudio = null;
+                }
+                
+                // Stop background music
+                this.stopBackgroundMusic();
+                
+                // Send interrupt signal to server
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify({
+                        type: 'interrupt',
+                        session_id: this.currentSessionId
+                    }));
+                }
+                
+                this.showLoading(false);
+                this.addMessage('system', 'AI interrupted by user');
+            }
+
+            updateCallState(newState) {
+                this.callState = newState;
+                
+                // Update button states
+                this.dialButton.disabled = newState !== 'idle';
+                this.hangupButton.disabled = newState === 'idle';
+                this.interruptButton.disabled = newState !== 'connected';
+                
+                // Update status display
+                this.callStatus.className = `call-status status-${newState}`;
+                
+                switch (newState) {
+                    case 'idle':
+                        this.updateStatus('info', 'Ready to dial', 'Click the dial button to start your call');
+                        break;
+                    case 'dialing':
+                        this.updateStatus('warning', 'Dialing...', 'Connecting to AI assistant');
+                        break;
+                    case 'connected':
+                        this.updateStatus('success', 'Connected', 'Call in progress');
+                        break;
+                    case 'ended':
+                        this.updateStatus('info', 'Call ended', 'Thank you for calling!');
+                        break;
+                }
+            }
+
+            updateStatus(type, text, details = '') {
+                this.statusText.textContent = text;
+                this.statusDetails.textContent = details;
+            }
+
+            addMessage(type, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}-message`;
+                
+                const timestamp = new Date().toLocaleTimeString();
+                const prefix = type === 'user' ? 'You' : type === 'ai' ? 'AI' : 'System';
+                
+                messageDiv.innerHTML = `<strong>${prefix} (${timestamp}):</strong> ${text}`;
+                this.conversationMessages.appendChild(messageDiv);
+                this.conversationMessages.scrollTop = this.conversationMessages.scrollHeight;
+            }
+
+            showLoading(show) {
+                this.loadingIndicator.style.display = show ? 'block' : 'none';
+            }
+
+            startCallTimer() {
+                this.callStartTime = Date.now();
+                this.callTimer = setInterval(() => {
+                    const elapsed = Date.now() - this.callStartTime;
+                    const minutes = Math.floor(elapsed / 60000);
+                    const seconds = Math.floor((elapsed % 60000) / 1000);
+                    this.callTimerDisplay.textContent = 
+                        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }, 1000);
+            }
+
+            stopCallTimer() {
+                if (this.callTimer) {
+                    clearInterval(this.callTimer);
+                    this.callTimer = null;
+                }
+            }
+
+            getCallSettings() {
+                return {
+                    language: this.languageSelect.value,
+                    model: this.modelSelect.value,
+                    speed: parseFloat(this.speedSelect.value),
+                    kid_friendly: this.kidFriendlyToggle.checked,
+                    background_music: this.backgroundMusicToggle.checked
+                };
+            }
+
+            updateSettings() {
+                // Save settings to localStorage
+                localStorage.setItem('phoneCallSettings', JSON.stringify(this.getCallSettings()));
+                
+                // If call is active, send settings update
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify({
+                        type: 'settings_update',
+                        session_id: this.currentSessionId,
+                        settings: this.getCallSettings()
+                    }));
+                }
+            }
+
+            generateSessionId() {
+                return 'phone-call-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            }
+
+            saveCallToHistory() {
+                const callDuration = this.callTimerDisplay.textContent;
+                const historyItem = {
+                    timestamp: new Date().toISOString(),
+                    duration: callDuration,
+                    settings: this.getCallSettings()
+                };
+                
+                // Save to localStorage (in real app, this would go to backend)
+                const history = JSON.parse(localStorage.getItem('callHistory') || '[]');
+                history.unshift(historyItem);
+                history.splice(10); // Keep only last 10 calls
+                localStorage.setItem('callHistory', JSON.stringify(history));
+                
+                this.updateCallHistoryDisplay();
+            }
+
+            updateCallHistoryDisplay() {
+                const history = JSON.parse(localStorage.getItem('callHistory') || '[]');
+                const historyList = document.getElementById('callHistoryList');
+                
+                historyList.innerHTML = history.map(call => `
+                    <div class="history-item">
+                        <div class="history-time">${new Date(call.timestamp).toLocaleString()}</div>
+                        <div class="history-duration">Duration: ${call.duration}</div>
+                    </div>
+                `).join('');
+            }
+
+            loadSettings() {
+                const saved = localStorage.getItem('phoneCallSettings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    this.languageSelect.value = settings.language || 'en';
+                    this.modelSelect.value = settings.model || 'gemma3:1b';
+                    this.speedSelect.value = settings.speed || 1.0;
+                    this.kidFriendlyToggle.checked = settings.kid_friendly || false;
+                    this.backgroundMusicToggle.checked = settings.background_music !== false;
+                }
+            }
+        }
+
+        // Initialize the phone call interface when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const phoneInterface = new PhoneCallInterface();
+            phoneInterface.loadSettings();
+            phoneInterface.updateCallHistoryDisplay();
+        });
+    </script>
+</body>
+</html>
