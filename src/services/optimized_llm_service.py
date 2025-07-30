@@ -35,14 +35,14 @@ class OptimizedLLMService:
                 "estimated_speed": "moderate"  # Larger but available
             },
             # Keep original configs for when models become available
-            "gemma3:1b": {
-                "max_tokens": 150,  # Shorter responses for phone calls
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "stop_sequences": [".", "!", "?", "\n\n"],
-                "context_window": 2048,
-                "estimated_speed": "very_fast"  # <2s typical
-            },
+            # "gemma3:1b": {  # Currently unavailable
+            #     "max_tokens": 150,  # Shorter responses for phone calls
+            #     "temperature": 0.7,
+            #     "top_p": 0.9,
+            #     "stop_sequences": [".", "!", "?", "\n\n"],
+            #     "context_window": 2048,
+            #     "estimated_speed": "very_fast"  # <2s typical
+            # },
             "phi3-mini": {
                 "max_tokens": 120,
                 "temperature": 0.6,
@@ -95,7 +95,9 @@ class OptimizedLLMService:
         """Select the best model for phone call based on requirements"""
         # For kid-friendly mode, prefer more reliable models
         if kid_friendly:
-            if self.is_model_available("gemma3:latest"):
+            if self.is_model_available("gemma2:2b"):
+                return "gemma2:2b"
+            elif self.is_model_available("gemma3:latest"):
                 return "gemma3:latest"
             elif self.is_model_available("llama3.1:8b"):
                 return "llama3.1:8b"
@@ -110,13 +112,12 @@ class OptimizedLLMService:
             return "llama3.1:8b"
         elif self.is_model_available("phi3-mini"):
             return "phi3-mini"
-        elif self.is_model_available("gemma3:1b"):
-            return "gemma3:1b"
         elif self.is_model_available("llama3.2:1b"):
+            return "llama3.2:1b"
             return "llama3.2:1b"
         
         # Fallback to larger model
-        return "llama3.1:8b"
+        return "gemma2:2b"
     
     def is_model_available(self, model_name: str) -> bool:
         """Check if a model is available and responsive"""
@@ -162,7 +163,7 @@ class OptimizedLLMService:
                 self.active_connections += 1
                 
                 # Get model config
-                config = self.model_configs.get(model, self.model_configs["gemma3:1b"])
+                config = self.model_configs.get(model, self.model_configs["gemma2:2b"])
                 
                 # Optimize context
                 if conversation_context:
@@ -312,7 +313,7 @@ class OptimizedLLMService:
         logger.info("Warming up models for phone calls...")
         warmup_results = {}
         
-        for model_name in ["phi3-mini", "gemma3:1b", "llama3.2:1b"]:
+        for model_name in ["phi3-mini", "gemma2:2b", "llama3.2:1b"]:
             try:
                 # Send a simple warmup request
                 result = await self.fast_completion(

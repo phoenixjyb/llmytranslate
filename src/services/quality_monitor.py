@@ -69,7 +69,7 @@ class QualityMonitor:
             },
             "llm": {
                 "primary": "phi3-mini",
-                "fallbacks": ["gemma3:1b", "llama3.2:1b", "gemma3:2b"],
+                "fallbacks": ["gemma2:2b", "llama3.2:1b", "gemma3:2b"],
                 "emergency": "simple_responses"
             },
             "tts": {

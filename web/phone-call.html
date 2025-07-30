@@ -482,10 +482,10 @@
             <div class="setting-group">
                 <label class="setting-label">AI Model</label>
                 <select class="setting-input" id="modelSelect">
-                    <option value="gemma3:1b">Gemma 3 1B (Fast)</option>
+                    <option value="gemma2:2b">Gemma 2 2B (Fastest)</option>
                     <option value="gemma3:latest">Gemma 3 (Balanced)</option>
-                    <option value="phi3.5:latest">Phi 3.5 (Quality)</option>
-                    <option value="llama3.2:latest">Llama 3.2 (Advanced)</option>
+                    <option value="llama3.1:8b">Llama 3.1 8B (Quality)</option>
+                    <option value="phi3.5:latest">Phi 3.5 (Advanced)</option>
                 </select>
             </div>
 
@@ -1019,7 +1019,7 @@
                 if (saved) {
                     const settings = JSON.parse(saved);
                     this.languageSelect.value = settings.language || 'en';
-                    this.modelSelect.value = settings.model || 'gemma3:1b';
+                    this.modelSelect.value = settings.model || 'gemma2:2b';
                     this.speedSelect.value = settings.speed || 1.0;
                     this.kidFriendlyToggle.checked = settings.kid_friendly || false;
                     this.backgroundMusicToggle.checked = settings.background_music !== false;

@@ -68,7 +68,7 @@ class PhoneCallSession(BaseModel):
 
 class PhoneCallSettings(BaseModel):
     language: str = "en"
-    model: str = "gemma3:1b"
+    model: str = "gemma2:2b"
     speed: float = 1.0
     kid_friendly: bool = False
     background_music: bool = True
@@ -154,7 +154,7 @@ class PhoneCallManager:
             await self.conversation_manager.save_conversation(
                 conversation_id=conversation_id,
                 messages=messages,
-                model_used=session.settings.get("model", "gemma3:1b"),
+                model_used=session.settings.get("model", "gemma2:2b"),
                 title=f"Phone Call - {session.start_time.strftime('%Y-%m-%d %H:%M')}"
             )
             logger.info(f"Saved phone call conversation: {conversation_id}")
@@ -244,7 +244,7 @@ async def phone_call_websocket(websocket: WebSocket):
                     logger.info("Connection pooling optimized for phone calls")
                 
                 # Phase 4: Pre-warm optimized LLM
-                model = settings.get("model", "gemma3:1b")
+                model = settings.get("model", "gemma2:2b")
                 await optimized_llm_service.warmup_models()
                 
             elif message_type == "audio_data":
@@ -330,7 +330,7 @@ async def get_interruptible_llm_response(session: PhoneCallSession, user_text: s
             quality_monitor.record_service_performance("llm", 8.0, False, "timeout")
             
             # Try emergency fallback
-            fallback_model = "gemma3:1b"  # Faster fallback model
+            fallback_model = "gemma2:2b"  # Faster fallback model
             llm_task = asyncio.create_task(optimized_llm_service.fast_completion(
                 message=user_text,
                 model=fallback_model,
@@ -1067,7 +1067,7 @@ async def handle_optimized_session_start(websocket: WebSocket, message: Dict):
             logger.info("Connection pooling optimized for phone calls")
         
         # Phase 4: Pre-warm optimized LLM for faster first response
-        model = settings_data.get("model", "gemma3:1b")
+        model = settings_data.get("model", "gemma2:2b")
         await optimized_llm_service.warmup_models()
         
         # Phase 4: Get current service quality
@@ -1239,7 +1239,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             },
             "optimization": {
                 "quality": current_quality.value,
-                "model_used": session.settings.get("model", "gemma3:1b"),
+                "model_used": session.settings.get("model", "gemma2:2b"),
                 "performance_score": performance_monitor.get_session_score(session_id)
             }
         }))
