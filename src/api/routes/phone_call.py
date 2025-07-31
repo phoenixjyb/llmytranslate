@@ -497,6 +497,16 @@ async def handle_session_start(websocket: WebSocket, message: Dict):
 async def handle_audio_data(websocket: WebSocket, message: Dict):
     """Handle incoming audio data for transcription and processing."""
     session_id = message["session_id"]
+    
+    # Validate audio data exists
+    if "audio" not in message:
+        logger.error("Missing audio data in message")
+        await websocket.send_text(json.dumps({
+            "type": "error", 
+            "message": "Missing audio data"
+        }))
+        return
+        
     audio_data = message["audio"]
     timestamp = message.get("timestamp", datetime.now().isoformat())
     
@@ -1368,7 +1378,6 @@ async def handle_optimized_session_end(websocket: WebSocket, message: Dict, call
         # Phase 4: Record session end with metrics
         performance_monitor.record_call_end(
             session_id=session_id,
-            duration=call_duration,
             success=True
         )
         
