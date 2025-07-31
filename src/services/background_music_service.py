@@ -8,7 +8,7 @@ import logging
 import base64
 import random
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -99,34 +99,64 @@ class BackgroundMusicService:
             return {}
     
     def _generate_synthetic_ambient(self) -> Optional[str]:
-        """Generate a simple synthetic ambient sound."""
+        """Generate a simple synthetic ambient sound using basic math."""
         try:
-            import numpy as np
             import wave
+            import struct
+            import math
             import io
             
-            # Generate 10 seconds of soft ambient sound
-            sample_rate = 16000
-            duration = 10.0
-            t = np.linspace(0, duration, int(sample_rate * duration))
+            # Generate 15 seconds of soft ambient sound
+            sample_rate = 22050
+            duration = 15.0
+            amplitude = 0.2
             
-            # Create a gentle ambient sound with multiple sine waves
-            frequency1 = 200  # Base frequency
-            frequency2 = 300  # Harmonic
-            frequency3 = 150  # Sub-harmonic
-            
-            # Generate waves with fade in/out
-            wave1 = 0.1 * np.sin(2 * np.pi * frequency1 * t)
-            wave2 = 0.05 * np.sin(2 * np.pi * frequency2 * t + np.pi/4)
-            wave3 = 0.08 * np.sin(2 * np.pi * frequency3 * t + np.pi/2)
-            
-            # Combine waves
-            combined = wave1 + wave2 + wave3
-            
-            # Apply fade in/out
+            # Generate samples using basic math
+            samples = []
+            total_samples = int(sample_rate * duration)
             fade_samples = int(sample_rate * 1.0)  # 1 second fade
-            fade_in = np.linspace(0, 1, fade_samples)
-            fade_out = np.linspace(1, 0, fade_samples)
+            
+            for i in range(total_samples):
+                t = i / sample_rate
+                
+                # Create layered ambient sound
+                base_wave = amplitude * math.sin(2 * math.pi * 220 * t)  # A3
+                harmonic = 0.3 * amplitude * math.sin(2 * math.pi * 330 * t + math.pi/3)  # E4
+                sub_harmonic = 0.4 * amplitude * math.sin(2 * math.pi * 165 * t + math.pi/2)  # E3
+                modulation = 0.1 * amplitude * math.sin(2 * math.pi * 0.1 * t)  # Slow modulation
+                
+                value = base_wave + harmonic + sub_harmonic + modulation
+                
+                # Apply fade in/out
+                if i < fade_samples:
+                    value *= (i / fade_samples)
+                elif i > total_samples - fade_samples:
+                    remaining = total_samples - i
+                    value *= (remaining / fade_samples)
+                
+                samples.append(int(value * 32767))
+            
+            # Create WAV file in memory
+            buffer = io.BytesIO()
+            with wave.open(buffer, 'wb') as wav_file:
+                wav_file.setnchannels(1)      # Mono
+                wav_file.setsampwidth(2)      # 2 bytes per sample
+                wav_file.setframerate(sample_rate)
+                
+                # Pack samples as 16-bit signed integers
+                packed_data = struct.pack('<' + 'h' * len(samples), *samples)
+                wav_file.writeframes(packed_data)
+            
+            buffer.seek(0)
+            wav_data = buffer.read()
+            
+            # Return base64 encoded audio
+            import base64
+            return base64.b64encode(wav_data).decode('utf-8')
+            
+        except Exception as e:
+            logger.error(f"Failed to generate synthetic ambient: {e}")
+            return None
             
             combined[:fade_samples] *= fade_in
             combined[-fade_samples:] *= fade_out
@@ -160,30 +190,141 @@ class BackgroundMusicService:
         track_name = random.choice(list(self.music_tracks.keys()))
         return self.music_tracks[track_name]
     
+    def get_track_by_style(self, style: str) -> Optional[Dict[str, Any]]:
+        """Get a track by style (gentle, meditation, uplifting, focus)."""
+        style_tracks = [
+            track for track in self.music_tracks.values() 
+            if track.get("style") == style
+        ]
+        if style_tracks:
+            return random.choice(style_tracks)
+        return self.get_random_track()
+    
     def get_track_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """Get a specific background music track by name."""
         return self.music_tracks.get(name)
     
-    async def get_background_music(self, duration: float = 10.0) -> Optional[Dict[str, Any]]:
+    def list_available_tracks(self) -> List[Dict[str, Any]]:
+        """List all available background music tracks with their info."""
+        return [
+            {
+                "name": track.get("name", "Unknown"),
+                "duration": track.get("duration", 0),
+                "style": track.get("style", "unknown"),
+                "description": track.get("description", ""),
+                "volume": track.get("volume", 0.3),
+                "has_audio": track.get("audio_data") is not None
+            }
+            for track in self.music_tracks.values()
+        ]
+    
+    def get_background_music(self, style: str = "default") -> Dict[str, Any]:
         """
-        Get background music for a specific duration.
+        Get background music for phone calls.
         
         Args:
-            duration: Desired duration in seconds
+            style: Style of music ("gentle", "meditation", "uplifting", "focus", "default")
             
         Returns:
-            Dict with music data or None if not available
+            Dict with music data
         """
-        if not self.is_available:
-            return None
-        
         try:
-            # Get a suitable track
-            track = self.get_random_track()
-            if not track:
-                return None
+            # Try to get pre-loaded track by style
+            track = self.get_track_by_style(style)
             
-            # For now, return the track as-is
+            if track and track.get("audio_data"):
+                return track
+            
+            # Generate synthetic audio if no pre-loaded track available
+            audio_data = self._generate_synthetic_ambient_by_style(style)
+            
+            return {
+                "name": f"{style.title()} Ambient",
+                "duration": 15.0,
+                "type": "synthetic",
+                "style": style,
+                "description": f"Generated {style} ambient music for phone calls",
+                "audio_data": audio_data,
+                "format": "wav",
+                "volume": 0.3
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get background music: {e}")
+            return {
+                "name": "Silent",
+                "duration": 0.0,
+                "type": "silent",
+                "audio_data": None,
+                "format": "wav",
+                "volume": 0.0
+            }
+    
+    def _generate_synthetic_ambient_by_style(self, style: str) -> Optional[str]:
+        """Generate synthetic ambient audio for specific style."""
+        try:
+            import wave
+            import struct
+            import math
+            import io
+            import base64
+            
+            # Style-specific parameters
+            style_params = {
+                "gentle": {"freq": 220, "harmonics": [330, 165], "amplitude": 0.15},
+                "meditation": {"freq": 110, "harmonics": [165, 82], "amplitude": 0.2},
+                "uplifting": {"freq": 330, "harmonics": [440, 220], "amplitude": 0.18},
+                "focus": {"freq": 165, "harmonics": [247, 110], "amplitude": 0.12},
+                "default": {"freq": 196, "harmonics": [294, 147], "amplitude": 0.16}
+            }
+            
+            params = style_params.get(style, style_params["default"])
+            
+            sample_rate = 22050
+            duration = 15.0
+            total_samples = int(sample_rate * duration)
+            fade_samples = int(sample_rate * 1.0)
+            
+            samples = []
+            for i in range(total_samples):
+                t = i / sample_rate
+                
+                # Base frequency
+                value = params["amplitude"] * math.sin(2 * math.pi * params["freq"] * t)
+                
+                # Add harmonics
+                for j, harmonic_freq in enumerate(params["harmonics"]):
+                    amplitude_factor = 0.3 - (j * 0.1)  # Decreasing amplitude for higher harmonics
+                    phase = (j + 1) * math.pi / 3  # Different phase for each harmonic
+                    value += amplitude_factor * params["amplitude"] * math.sin(2 * math.pi * harmonic_freq * t + phase)
+                
+                # Add gentle modulation
+                value += 0.05 * params["amplitude"] * math.sin(2 * math.pi * 0.1 * t)
+                
+                # Apply fade in/out
+                if i < fade_samples:
+                    value *= (i / fade_samples)
+                elif i > total_samples - fade_samples:
+                    remaining = total_samples - i
+                    value *= (remaining / fade_samples)
+                
+                samples.append(int(value * 32767))
+            
+            # Create WAV in memory
+            buffer = io.BytesIO()
+            with wave.open(buffer, 'wb') as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(sample_rate)
+                packed_data = struct.pack('<' + 'h' * len(samples), *samples)
+                wav_file.writeframes(packed_data)
+            
+            buffer.seek(0)
+            return base64.b64encode(buffer.read()).decode('utf-8')
+            
+        except Exception as e:
+            logger.error(f"Failed to generate {style} ambient audio: {e}")
+            return None
             # In a more advanced implementation, we could trim or loop the audio
             return {
                 "name": track["name"],

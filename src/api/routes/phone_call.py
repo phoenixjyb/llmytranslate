@@ -73,6 +73,36 @@ class PhoneCallSettings(BaseModel):
     kid_friendly: bool = False
     background_music: bool = True
     voice: str = "default"
+    
+    class Config:
+        # Allow extra fields but ignore them
+        extra = "ignore"
+    
+    @classmethod
+    def create_with_defaults(cls, data: Dict[str, Any]) -> 'PhoneCallSettings':
+        """Create PhoneCallSettings with proper defaults, handling None values."""
+        # Clean the data by removing None values and using defaults
+        clean_data = {}
+        for key, value in data.items():
+            if value is not None:
+                clean_data[key] = value
+        
+        # Ensure critical fields have proper defaults
+        defaults = {
+            "language": "en",
+            "model": "gemma2:2b", 
+            "speed": 1.0,
+            "kid_friendly": False,
+            "background_music": True,
+            "voice": "default"
+        }
+        
+        # Apply defaults for missing or None values
+        for key, default_value in defaults.items():
+            if key not in clean_data or clean_data[key] is None:
+                clean_data[key] = default_value
+        
+        return cls(**clean_data)
 
 class PhoneCallManager:
     """Manages active phone call sessions with enhanced audio processing."""
@@ -271,14 +301,16 @@ async def phone_call_websocket(websocket: WebSocket):
         # Phase 4: Record disconnection
         if session_id:
             call_duration = time.time() - call_start_time
-            performance_monitor.record_call_end(session_id, call_duration, success=False, error="disconnect")
+            performance_monitor.record_call_end(session_id, success=False)
+            performance_monitor.record_audio_issue(session_id, "disconnect", f"Duration: {call_duration:.2f}s")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         
         # Phase 4: Record error
         if session_id:
             call_duration = time.time() - call_start_time
-            performance_monitor.record_call_end(session_id, call_duration, success=False, error=str(e))
+            performance_monitor.record_call_end(session_id, success=False)
+            performance_monitor.record_audio_issue(session_id, "websocket_error", f"Error: {str(e)}, Duration: {call_duration:.2f}s")
         
         await websocket.send_text(json.dumps({
             "type": "error",
@@ -411,7 +443,7 @@ async def handle_session_start(websocket: WebSocket, message: Dict):
     user_id = message.get("user_id", "anonymous")
     
     try:
-        settings = PhoneCallSettings(**settings_data)
+        settings = PhoneCallSettings.create_with_defaults(settings_data)
         session = phone_manager.create_session(session_id, settings)
         session.status = "connected"
         session.user_id = user_id
@@ -1039,7 +1071,7 @@ async def handle_optimized_session_start(websocket: WebSocket, message: Dict):
     user_id = message.get("user_id", "anonymous")
     
     try:
-        settings = PhoneCallSettings(**settings_data)
+        settings = PhoneCallSettings.create_with_defaults(settings_data)
         session = phone_manager.create_session(session_id, settings)
         session.status = "connected"
         session.user_id = user_id
@@ -1119,11 +1151,19 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         # Phase 4: Start comprehensive performance tracking
         interaction_start_time = time.time()
         
-        # Decode audio data
+        # Decode audio data - handle missing audio_data gracefully
+        if "audio_data" not in message:
+            logger.error("Missing audio_data in message")
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": "Missing audio data"
+            }))
+            return
+            
         audio_data = base64.b64decode(message["audio_data"])
         
-        # Phase 4: Record audio processing start
-        performance_monitor.record_interaction_start(session_id, len(audio_data))
+        # Phase 4: Record audio processing start (using existing method)
+        logger.info(f"Processing audio data: {len(audio_data)} bytes")
         
         # Phase 2: Apply noise reduction if enabled
         if session.settings.noise_reduction:
@@ -1183,7 +1223,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         try:
             audio_response = await tts_client.synthesize_speech(
                 ai_text,
-                voice=session.settings.tts_voice,
+                voice=session.settings.voice,
                 language=session.settings.language,
                 optimization_level=session.settings.get("optimization_level", "balanced")
             )
@@ -1193,7 +1233,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             try:
                 audio_response = await simple_tts_fallback.synthesize_speech(
                     ai_text,
-                    voice=session.settings.tts_voice,
+                    voice=session.settings.voice,
                     language=session.settings.language
                 )
             except Exception as fallback_error:
@@ -1209,7 +1249,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             text_length=len(ai_text),
             audio_length=len(audio_response) if audio_response else 0,
             success=bool(audio_response),
-            voice=session.settings.tts_voice,
+            voice=session.settings.voice,
             language=session.settings.language
         )
         
@@ -1244,15 +1284,9 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             }
         }))
         
-        # Phase 4: Record complete interaction with enhanced metrics
-        performance_monitor.record_complete_interaction(
-            session_id=session_id,
-            total_duration=total_duration,
-            stt_duration=stt_duration,
-            llm_duration=llm_duration,
-            tts_duration=tts_duration,
-            success=True
-        )
+        # Phase 4: Record interaction success (using existing methods)
+        # The individual component performance is already recorded above
+        logger.info(f"Interaction completed: total={total_duration:.2f}s, stt={stt_duration:.2f}s, llm={llm_duration:.2f}s, tts={tts_duration:.2f}s")
         
         # Phase 3: Save to call history
         call_history_service.add_message(
@@ -1271,15 +1305,10 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         
         # Phase 4: Record failed interaction
         total_duration = time.time() - interaction_start_time if 'interaction_start_time' in locals() else 0.0
-        performance_monitor.record_complete_interaction(
-            session_id=session_id,
-            total_duration=total_duration,
-            stt_duration=0.0,
-            llm_duration=0.0,
-            tts_duration=0.0,
-            success=False,
-            error=str(e)
-        )
+        
+        # Record audio processing error
+        performance_monitor.record_audio_issue(session_id, "processing_error", str(e))
+        logger.error(f"Audio processing failed: {e} (duration: {total_duration:.2f}s)")
         
         await websocket.send_text(json.dumps({
             "type": "error",

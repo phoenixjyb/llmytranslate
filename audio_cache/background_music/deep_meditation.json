@@ -1,0 +1,12 @@
+{
+  "name": "Deep Meditation",
+  "duration": 20.0,
+  "type": "ambient",
+  "style": "meditation",
+  "description": "Deep meditative tones for calm conversations",
+  "audio_data": null,
+  "format": "wav",
+  "volume": 0.2,
+  "tags": ["meditation", "deep", "calm"],
+  "suitable_for": ["phone_calls", "background", "meditation"]
+}

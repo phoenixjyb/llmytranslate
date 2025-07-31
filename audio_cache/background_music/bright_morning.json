@@ -1,0 +1,12 @@
+{
+  "name": "Bright Morning",
+  "duration": 12.0,
+  "type": "ambient",
+  "style": "uplifting",
+  "description": "Bright and uplifting tones for positive conversations",
+  "audio_data": null,
+  "format": "wav",
+  "volume": 0.3,
+  "tags": ["uplifting", "bright", "positive"],
+  "suitable_for": ["phone_calls", "background", "morning"]
+}

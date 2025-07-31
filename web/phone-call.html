@@ -539,6 +539,7 @@
             constructor() {
                 this.callState = 'idle'; // idle, dialing, connected, ended
                 this.callTimer = null;
+                this.heartbeatInterval = null;  // Add heartbeat mechanism
                 this.callStartTime = null;
                 this.currentSessionId = null;
                 this.websocket = null;
@@ -948,6 +949,9 @@
                     this.callTimerDisplay.textContent = 
                         `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
                 }, 1000);
+                
+                // Start WebSocket heartbeat to prevent disconnections
+                this.startHeartbeat();
             }
 
             stopCallTimer() {
@@ -955,15 +959,40 @@
                     clearInterval(this.callTimer);
                     this.callTimer = null;
                 }
+                
+                // Stop WebSocket heartbeat
+                this.stopHeartbeat();
+            }
+            
+            startHeartbeat() {
+                // Send ping every 10 seconds to keep connection alive
+                this.heartbeatInterval = setInterval(() => {
+                    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                        this.websocket.send(JSON.stringify({
+                            type: 'ping',
+                            session_id: this.currentSessionId,
+                            timestamp: Date.now()
+                        }));
+                    }
+                }, 10000); // 10 second intervals
+            }
+            
+            stopHeartbeat() {
+                if (this.heartbeatInterval) {
+                    clearInterval(this.heartbeatInterval);
+                    this.heartbeatInterval = null;
+                }
             }
 
             getCallSettings() {
+                // Ensure all values have proper defaults
+                const speed = parseFloat(this.speedSelect.value);
                 return {
-                    language: this.languageSelect.value,
-                    model: this.modelSelect.value,
-                    speed: parseFloat(this.speedSelect.value),
-                    kid_friendly: this.kidFriendlyToggle.checked,
-                    background_music: this.backgroundMusicToggle.checked
+                    language: this.languageSelect.value || 'en',
+                    model: this.modelSelect.value || 'gemma2:2b',
+                    speed: isNaN(speed) ? 1.0 : speed,
+                    kid_friendly: Boolean(this.kidFriendlyToggle.checked),
+                    background_music: Boolean(this.backgroundMusicToggle.checked)
                 };
             }
 

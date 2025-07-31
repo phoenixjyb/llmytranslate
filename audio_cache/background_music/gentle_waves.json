@@ -1,0 +1,12 @@
+{
+  "name": "Gentle Waves",
+  "duration": 15.0,
+  "type": "ambient",
+  "style": "gentle",
+  "description": "Soft ambient waves for relaxation during phone calls",
+  "audio_data": null,
+  "format": "wav",
+  "volume": 0.25,
+  "tags": ["gentle", "relaxing", "waves"],
+  "suitable_for": ["phone_calls", "background", "waiting"]
+}
