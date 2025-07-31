@@ -128,6 +128,187 @@
             margin: 10px 0;
         }
 
+        /* Process Status Indicator */
+        .process-status {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .process-status.active {
+            display: block;
+        }
+
+        .process-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .process-stages {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .process-stage {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            position: relative;
+        }
+
+        .stage-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 2;
+        }
+
+        .stage-icon.waiting {
+            background: #e9ecef;
+            color: #666;
+        }
+
+        .stage-icon.active {
+            background: #ff8a00;
+            color: white;
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 0 0 rgba(255, 138, 0, 0.4);
+        }
+
+        .stage-icon.completed {
+            background: #28a745;
+            color: white;
+        }
+
+        .stage-icon.error {
+            background: #dc3545;
+            color: white;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 138, 0, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 6px rgba(255, 138, 0, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 138, 0, 0);
+            }
+        }
+
+        .stage-label {
+            font-size: 0.7rem;
+            color: #666;
+            text-align: center;
+            font-weight: 500;
+            max-width: 60px;
+            line-height: 1.2;
+        }
+
+        .stage-label.active {
+            color: #ff8a00;
+            font-weight: 600;
+        }
+
+        .stage-connector {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            right: -50%;
+            height: 2px;
+            background: #e9ecef;
+            z-index: 1;
+        }
+
+        .stage-connector.active {
+            background: #ff8a00;
+        }
+
+        .stage-connector.completed {
+            background: #28a745;
+        }
+
+        .process-stage:last-child .stage-connector {
+            display: none;
+        }
+
+        .process-details {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            color: #666;
+            text-align: center;
+            min-height: 20px;
+        }
+
+        .agent-response-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 10px 0;
+            padding: 8px;
+            background: #f0f8ff;
+            border-radius: 8px;
+            border-left: 3px solid #007bff;
+            display: none;
+        }
+
+        .agent-response-indicator.active {
+            display: flex;
+        }
+
+        .response-dots {
+            display: flex;
+            gap: 3px;
+        }
+
+        .response-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #007bff;
+            animation: typing 1.4s infinite;
+        }
+
+        .response-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .response-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.5;
+            }
+            30% {
+                transform: translateY(-8px);
+                opacity: 1;
+            }
+        }
+
         .phone-controls {
             display: flex;
             justify-content: center;
@@ -441,6 +622,48 @@
                 <div class="call-timer" id="callTimer">00:00</div>
             </div>
 
+            <!-- Process Status Indicator -->
+            <div class="process-status" id="processStatus">
+                <div class="process-title">Processing Status</div>
+                <div class="process-stages">
+                    <div class="process-stage">
+                        <div class="stage-icon waiting" id="stage-listening">🎤</div>
+                        <div class="stage-label">Listening</div>
+                        <div class="stage-connector"></div>
+                    </div>
+                    <div class="process-stage">
+                        <div class="stage-icon waiting" id="stage-stt">🗣️</div>
+                        <div class="stage-label">Speech Recognition</div>
+                        <div class="stage-connector"></div>
+                    </div>
+                    <div class="process-stage">
+                        <div class="stage-icon waiting" id="stage-transfer">📤</div>
+                        <div class="stage-label">Transfer</div>
+                        <div class="stage-connector"></div>
+                    </div>
+                    <div class="process-stage">
+                        <div class="stage-icon waiting" id="stage-llm">🧠</div>
+                        <div class="stage-label">AI Thinking</div>
+                        <div class="stage-connector"></div>
+                    </div>
+                    <div class="process-stage">
+                        <div class="stage-icon waiting" id="stage-tts">🔊</div>
+                        <div class="stage-label">Text to Speech</div>
+                    </div>
+                </div>
+                <div class="process-details" id="processDetails">Ready to process audio</div>
+                
+                <!-- Agent Response Indicator -->
+                <div class="agent-response-indicator" id="agentResponseIndicator">
+                    <div class="response-dots">
+                        <div class="response-dot"></div>
+                        <div class="response-dot"></div>
+                        <div class="response-dot"></div>
+                    </div>
+                    <span>Agent is responding...</span>
+                </div>
+            </div>
+
             <div class="conversation-display" id="conversationDisplay" style="display: none;">
                 <div id="conversationMessages"></div>
             </div>
@@ -565,12 +788,145 @@
                 this.loadingIndicator = document.getElementById('loadingIndicator');
                 this.callStatus = document.getElementById('callStatus');
                 
+                // Process status elements
+                this.processStatus = document.getElementById('processStatus');
+                this.processDetails = document.getElementById('processDetails');
+                this.agentResponseIndicator = document.getElementById('agentResponseIndicator');
+                
+                // Stage elements
+                this.stageElements = {
+                    listening: document.getElementById('stage-listening'),
+                    stt: document.getElementById('stage-stt'),
+                    transfer: document.getElementById('stage-transfer'),
+                    llm: document.getElementById('stage-llm'),
+                    tts: document.getElementById('stage-tts')
+                };
+                
                 // Settings
                 this.languageSelect = document.getElementById('languageSelect');
                 this.modelSelect = document.getElementById('modelSelect');
                 this.speedSelect = document.getElementById('speedSelect');
                 this.kidFriendlyToggle = document.getElementById('kidFriendlyToggle');
                 this.backgroundMusicToggle = document.getElementById('backgroundMusicToggle');
+            }
+
+            // Process Status Management
+            showProcessStatus() {
+                this.processStatus.classList.add('active');
+                this.resetProcessStages();
+            }
+
+            hideProcessStatus() {
+                this.processStatus.classList.remove('active');
+                this.agentResponseIndicator.classList.remove('active');
+            }
+
+            resetProcessStages() {
+                Object.values(this.stageElements).forEach(element => {
+                    element.className = 'stage-icon waiting';
+                });
+                this.updateProcessDetails('Ready to process audio');
+                this.agentResponseIndicator.classList.remove('active');
+            }
+
+            setStageStatus(stageName, status, details = '') {
+                const element = this.stageElements[stageName];
+                if (!element) return;
+
+                // Reset all stage classes
+                element.className = 'stage-icon';
+                
+                switch (status) {
+                    case 'active':
+                        element.classList.add('active');
+                        this.updateProcessDetails(details || `${this.getStageName(stageName)} in progress...`);
+                        break;
+                    case 'completed':
+                        element.classList.add('completed');
+                        break;
+                    case 'error':
+                        element.classList.add('error');
+                        this.updateProcessDetails(details || `Error in ${this.getStageName(stageName)}`);
+                        break;
+                    default:
+                        element.classList.add('waiting');
+                }
+            }
+
+            getStageName(stageKey) {
+                const stageNames = {
+                    listening: 'Audio Capture',
+                    stt: 'Speech Recognition',
+                    transfer: 'Data Transfer',
+                    llm: 'AI Processing',
+                    tts: 'Speech Synthesis'
+                };
+                return stageNames[stageKey] || stageKey;
+            }
+
+            updateProcessDetails(message) {
+                if (this.processDetails) {
+                    this.processDetails.textContent = message;
+                }
+            }
+
+            showAgentResponse() {
+                this.agentResponseIndicator.classList.add('active');
+            }
+
+            hideAgentResponse() {
+                this.agentResponseIndicator.classList.remove('active');
+            }
+
+            // Process flow management
+            startProcessFlow() {
+                this.showProcessStatus();
+                this.setStageStatus('listening', 'active', 'Capturing audio...');
+            }
+
+            completeListening() {
+                this.setStageStatus('listening', 'completed');
+                this.setStageStatus('stt', 'active', 'Converting speech to text...');
+            }
+
+            completeSpeechRecognition(transcription = '') {
+                this.setStageStatus('stt', 'completed');
+                this.setStageStatus('transfer', 'active', 'Sending data to server...');
+                if (transcription) {
+                    this.updateProcessDetails(`Recognized: "${transcription}"`);
+                }
+            }
+
+            completeTransfer() {
+                this.setStageStatus('transfer', 'completed');
+                this.setStageStatus('llm', 'active', 'AI is thinking...');
+                this.showAgentResponse();
+            }
+
+            completeLLMProcessing() {
+                this.setStageStatus('llm', 'completed');
+                this.setStageStatus('tts', 'active', 'Generating speech...');
+                this.hideAgentResponse();
+            }
+
+            completeTTSProcessing() {
+                this.setStageStatus('tts', 'completed');
+                this.updateProcessDetails('Response ready - playing audio');
+                
+                // Reset after a short delay
+                setTimeout(() => {
+                    this.resetProcessStages();
+                }, 2000);
+            }
+
+            handleProcessError(stage, error) {
+                this.setStageStatus(stage, 'error', `Error: ${error}`);
+                this.hideAgentResponse();
+                
+                // Reset after error display
+                setTimeout(() => {
+                    this.resetProcessStages();
+                }, 3000);
             }
 
             setupEventListeners() {
@@ -614,6 +970,9 @@
                     this.updateCallState('connected');
                     this.startCallTimer();
                     
+                    // Show process status indicator
+                    this.showProcessStatus();
+                    
                     this.conversationDisplay.style.display = 'block';
                     this.addMessage('system', 'Call connected! Start speaking...');
                     
@@ -621,6 +980,7 @@
                     console.error('Failed to start call:', error);
                     this.updateStatus('error', 'Failed to start call: ' + error.message);
                     this.updateCallState('idle');
+                    this.hideProcessStatus();
                 }
             }
 
@@ -690,8 +1050,14 @@
 
             sendAudioData(audioBlob) {
                 if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    // Start the process flow
+                    this.startProcessFlow();
+                    
                     const reader = new FileReader();
                     reader.onload = () => {
+                        // Complete listening stage and move to transfer
+                        this.completeListening();
+                        
                         const audioData = reader.result.split(',')[1]; // Remove data URL prefix
                         this.websocket.send(JSON.stringify({
                             type: 'audio_data',
@@ -706,7 +1072,16 @@
 
             handleWebSocketMessage(data) {
                 switch (data.type) {
+                    case 'process_status':
+                        // Handle process status updates
+                        if (data.stage && data.status) {
+                            this.setStageStatus(data.stage, data.status, data.details);
+                        }
+                        break;
+                        
                     case 'transcription':
+                        this.completeSpeechRecognition(data.text);
+                        this.completeTransfer();
                         this.addMessage('user', data.text);
                         this.showLoading(true);
                         if (data.processing_time) {
@@ -715,6 +1090,8 @@
                         break;
                         
                     case 'ai_response':
+                        this.completeLLMProcessing();
+                        this.completeTTSProcessing();
                         this.showLoading(false);
                         this.addMessage('ai', data.text);
                         if (data.audio) {
@@ -743,11 +1120,13 @@
                         this.stopBackgroundMusic();
                         this.showLoading(false);
                         this.updateStatus('success', data.message || 'AI interrupted');
+                        this.resetProcessStages();
                         break;
                         
                     case 'session_ended':
                         // Phase 3: Handle enhanced session end with summary
                         this.showLoading(false);
+                        this.hideProcessStatus();
                         if (data.call_summary) {
                             this.addMessage('system', 
                                 `Call ended. Duration: ${data.call_summary.duration}, Messages: ${data.call_summary.messages_exchanged}`
@@ -758,6 +1137,12 @@
                         
                     case 'error':
                         this.showLoading(false);
+                        // Handle process errors based on context
+                        if (data.stage) {
+                            this.handleProcessError(data.stage, data.message);
+                        } else {
+                            this.resetProcessStages();
+                        }
                         this.addMessage('system', 'Error: ' + data.message);
                         break;
                         
@@ -839,6 +1224,9 @@
 
             endCall() {
                 this.updateCallState('ended');
+                
+                // Hide process status
+                this.hideProcessStatus();
                 
                 // Clean up resources
                 if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {

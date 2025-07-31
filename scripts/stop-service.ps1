@@ -187,11 +187,35 @@ function Show-ServiceStatus {
         $testResponse = Invoke-WebRequest -Uri "http://localhost:8000/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
         if ($testResponse) {
             Write-Host "  🏥 Health Check: ⚠️  Service still responding" -ForegroundColor Yellow
+            
+            # Check Phase 4 components if main service is still running
+            Write-Host "`n🚀 Phase 4 Component Status:" -ForegroundColor Cyan
+            $componentEndpoints = @(
+                @{ Name = "Optimized LLM"; Endpoint = "/api/llm/health"; Icon = "🧠" },
+                @{ Name = "Performance Monitor"; Endpoint = "/api/performance/status"; Icon = "📊" },
+                @{ Name = "Quality Monitor"; Endpoint = "/api/quality/status"; Icon = "✅" },
+                @{ Name = "Connection Pool"; Endpoint = "/api/connections/status"; Icon = "🔗" }
+            )
+            
+            foreach ($component in $componentEndpoints) {
+                try {
+                    $compResponse = Invoke-RestMethod -Uri "http://localhost:8000$($component.Endpoint)" -TimeoutSec 1 -ErrorAction SilentlyContinue
+                    if ($compResponse) {
+                        Write-Host "  $($component.Icon) $($component.Name): ⚠️ Still running" -ForegroundColor Yellow
+                    } else {
+                        Write-Host "  $($component.Icon) $($component.Name): ✅ Stopped" -ForegroundColor Green
+                    }
+                } catch {
+                    Write-Host "  $($component.Icon) $($component.Name): ✅ Stopped" -ForegroundColor Green
+                }
+            }
         } else {
             Write-Host "  🏥 Health Check: ✅ No response (service stopped)" -ForegroundColor Green
+            Write-Host "  🚀 Phase 4 Components: ✅ All stopped" -ForegroundColor Green
         }
     } catch {
         Write-Host "  🏥 Health Check: ✅ Connection refused (service stopped)" -ForegroundColor Green
+        Write-Host "  🚀 Phase 4 Components: ✅ All stopped" -ForegroundColor Green
     }
 }
 
@@ -226,3 +250,8 @@ Write-Host "   .\scripts\stop-service.ps1 -NgrokOnly      # Stop only ngrok"
 Write-Host "   .\scripts\stop-service.ps1 -ServiceOnly    # Stop only translation service"
 Write-Host "   .\scripts\stop-service.ps1 -Force          # Force stop all"
 Write-Host "   .\scripts\stop-service.ps1 -Verbose        # Detailed output"
+Write-Host ""
+Write-Host "💡 Phase 4 Monitoring:" -ForegroundColor Cyan
+Write-Host "   .\scripts\service-status.ps1               # Check component status"
+Write-Host "   .\scripts\service-status.ps1 -Continuous   # Live monitoring"
+Write-Host "   .\scripts\service-status.ps1 -Detailed     # Detailed component info"

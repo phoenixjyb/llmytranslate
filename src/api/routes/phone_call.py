@@ -37,6 +37,32 @@ audio_processor = background_music_service  # Placeholder - needs audio processi
 # Import TTS fallback for when main TTS is not available
 from ...services.simple_tts_fallback import simple_tts_fallback
 
+# Process Status Helper Functions
+async def send_process_status(websocket: WebSocket, stage: str, status: str, details: str = ""):
+    """Send process status update to the frontend."""
+    try:
+        await websocket.send_text(json.dumps({
+            "type": "process_status",
+            "stage": stage,
+            "status": status,
+            "details": details,
+            "timestamp": datetime.now().isoformat()
+        }))
+    except Exception as e:
+        logger.error(f"Failed to send process status: {e}")
+
+async def send_stage_active(websocket: WebSocket, stage: str, details: str = ""):
+    """Mark a stage as active."""
+    await send_process_status(websocket, stage, "active", details)
+
+async def send_stage_completed(websocket: WebSocket, stage: str, details: str = ""):
+    """Mark a stage as completed."""
+    await send_process_status(websocket, stage, "completed", details)
+
+async def send_stage_error(websocket: WebSocket, stage: str, error: str):
+    """Mark a stage as error."""
+    await send_process_status(websocket, stage, "error", f"Error: {error}")
+
 # Phase 4: Helper function for quality monitoring
 def get_overall_quality():
     """Get overall service quality from quality monitor."""
@@ -1161,12 +1187,18 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         # Phase 4: Start comprehensive performance tracking
         interaction_start_time = time.time()
         
+        # Send process status: Transfer completed, starting STT
+        await send_stage_completed(websocket, "transfer", "Audio data received")
+        await send_stage_active(websocket, "stt", "Converting speech to text...")
+        
         # Decode audio data - handle missing audio_data gracefully
         if "audio_data" not in message:
             logger.error("Missing audio_data in message")
+            await send_stage_error(websocket, "transfer", "Missing audio data")
             await websocket.send_text(json.dumps({
                 "type": "error",
-                "message": "Missing audio data"
+                "message": "Missing audio data",
+                "stage": "transfer"
             }))
             return
             
@@ -1184,6 +1216,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             interrupt_detected = await interrupt_service.detect_interrupt(session_id, audio_data)
             if interrupt_detected:
                 logger.info(f"Interrupt detected for session {session_id}")
+                await send_stage_error(websocket, "stt", "Interrupted by user")
                 return
         
         # Phase 4: Optimized Speech-to-Text with performance tracking
@@ -1208,7 +1241,12 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         
         if not user_text or not user_text.strip():
             logger.info(f"No speech detected in session {session_id}")
+            await send_stage_error(websocket, "stt", "No speech detected")
             return
+        
+        # STT completed successfully
+        await send_stage_completed(websocket, "stt", f"Recognized: {user_text[:50]}...")
+        await send_stage_active(websocket, "llm", "AI is processing your message...")
         
         logger.info(f"User said ({stt_duration:.2f}s): {user_text}")
         
@@ -1222,7 +1260,12 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         
         if ai_text is None:
             # Response was interrupted or failed
+            await send_stage_error(websocket, "llm", "Response interrupted or failed")
             return
+        
+        # LLM completed successfully
+        await send_stage_completed(websocket, "llm", f"Generated response: {ai_text[:50]}...")
+        await send_stage_active(websocket, "tts", "Converting text to speech...")
         
         # Add AI response to conversation
         session.conversation_history.append({"role": "assistant", "content": ai_text})
@@ -1264,11 +1307,16 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         )
         
         if not audio_response:
+            await send_stage_error(websocket, "tts", "TTS processing failed")
             await websocket.send_text(json.dumps({
                 "type": "error",
-                "message": "TTS processing failed"
+                "message": "TTS processing failed",
+                "stage": "tts"
             }))
             return
+        
+        # TTS completed successfully
+        await send_stage_completed(websocket, "tts", "Audio ready for playback")
         
         # Phase 4: Calculate total interaction time and quality
         total_duration = time.time() - interaction_start_time
@@ -1278,7 +1326,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         audio_base64 = base64.b64encode(audio_response).decode()
         
         await websocket.send_text(json.dumps({
-            "type": "audio_response",
+            "type": "ai_response",
             "audio": audio_base64,
             "text": ai_text,
             "timing": {
@@ -1313,6 +1361,9 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
     except Exception as e:
         logger.error(f"Error in optimized audio processing: {e}")
         
+        # Send process error status
+        await send_stage_error(websocket, "llm", f"Processing failed: {str(e)}")
+        
         # Phase 4: Record failed interaction
         total_duration = time.time() - interaction_start_time if 'interaction_start_time' in locals() else 0.0
         
@@ -1322,7 +1373,8 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         
         await websocket.send_text(json.dumps({
             "type": "error",
-            "message": f"Audio processing error: {str(e)}"
+            "message": f"Audio processing error: {str(e)}",
+            "stage": "processing"
         }))
 
 async def handle_optimized_ping(websocket: WebSocket, message: Dict):

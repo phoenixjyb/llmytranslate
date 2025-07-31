@@ -308,6 +308,47 @@ class OptimizedLLMService:
             }
         }
     
+    async def get_service_stats(self) -> Dict[str, Any]:
+        """Get comprehensive service statistics for health monitoring"""
+        try:
+            stats = {
+                "service_name": "Optimized LLM Service",
+                "status": "healthy",
+                "uptime_seconds": time.time() - getattr(self, 'start_time', time.time()),
+                "total_requests": getattr(self, 'total_requests', 0),
+                "successful_requests": getattr(self, 'successful_requests', 0),
+                "failed_requests": getattr(self, 'failed_requests', 0),
+                "average_response_time": getattr(self, 'average_response_time', 0.0),
+                "model_performance": getattr(self, 'model_stats', {}),
+                "available_models": list(self.model_configs.keys()),
+                "optimal_model": self.get_optimal_model_for_phone_call(kid_friendly=False),
+                "connection_pool": {
+                    "total_connections": self.connection_pool_size,
+                    "active_connections": self.active_connections,
+                    "available_connections": self.connection_pool_size - self.active_connections
+                },
+                "last_health_check": self.last_health_check,
+                "recommended_models": {
+                    "fastest": self.get_optimal_model_for_phone_call(kid_friendly=False),
+                    "kid_friendly": self.get_optimal_model_for_phone_call(kid_friendly=True),
+                    "fallback": "gemma3:2b"
+                },
+                "performance_metrics": {
+                    "success_rate": (getattr(self, 'successful_requests', 0) / max(getattr(self, 'total_requests', 1), 1)) * 100,
+                    "current_load": self.active_connections / self.connection_pool_size if self.connection_pool_size > 0 else 0
+                }
+            }
+            return stats
+        except Exception as e:
+            logger.error(f"Error getting service stats: {e}")
+            return {
+                "service_name": "Optimized LLM Service",
+                "status": "error",
+                "error": str(e),
+                "uptime_seconds": 0,
+                "total_requests": 0
+            }
+    
     async def warmup_models(self) -> Dict[str, bool]:
         """Warm up models for faster first responses"""
         logger.info("Warming up models for phone calls...")

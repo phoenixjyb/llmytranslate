@@ -102,7 +102,7 @@ function Get-PythonExecutable {
     throw "No suitable Python executable found. Please ensure Python is installed and virtual environment is set up."
 }
 
-# Service health check
+# Service health check with Phase 4 component verification
 function Test-ServiceHealth {
     param([int]$Port = 8000, [int]$MaxAttempts = 30)
     
@@ -113,8 +113,42 @@ function Test-ServiceHealth {
             if ($IsWindowsPlatform) {
                 $result = Test-NetConnection -ComputerName localhost -Port $Port -WarningAction SilentlyContinue
                 if ($result.TcpTestSucceeded) {
-                    Write-Host "✅ Service is healthy and responding on port $Port" -ForegroundColor Green
-                    return $true
+                    # Additional check: verify main health endpoint
+                    try {
+                        $healthResponse = Invoke-RestMethod -Uri "http://localhost:$Port/api/health" -TimeoutSec 3 -ErrorAction SilentlyContinue
+                        if ($healthResponse) {
+                            Write-Host "✅ Main service is healthy and responding on port $Port" -ForegroundColor Green
+                            
+                            # Phase 4: Check service components
+                            Write-Host "`n🔍 Verifying Phase 4 service components..." -ForegroundColor Cyan
+                            $componentEndpoints = @(
+                                @{ Name = "Optimized LLM"; Endpoint = "/api/llm/health"; Icon = "🧠" },
+                                @{ Name = "Performance Monitor"; Endpoint = "/api/performance/status"; Icon = "📊" },
+                                @{ Name = "Quality Monitor"; Endpoint = "/api/quality/status"; Icon = "✅" },
+                                @{ Name = "Connection Pool"; Endpoint = "/api/connections/status"; Icon = "🔗" }
+                            )
+                            
+                            $healthyComponents = 0
+                            foreach ($component in $componentEndpoints) {
+                                try {
+                                    $compResponse = Invoke-RestMethod -Uri "http://localhost:$Port$($component.Endpoint)" -TimeoutSec 2 -ErrorAction SilentlyContinue
+                                    if ($compResponse) {
+                                        Write-Host "  $($component.Icon) $($component.Name): ✅ Healthy" -ForegroundColor Green
+                                        $healthyComponents++
+                                    } else {
+                                        Write-Host "  $($component.Icon) $($component.Name): ⚠️ Partial" -ForegroundColor Yellow
+                                    }
+                                } catch {
+                                    Write-Host "  $($component.Icon) $($component.Name): ⚠️ Initializing" -ForegroundColor Yellow
+                                }
+                            }
+                            
+                            Write-Host "`n🎯 Phase 4 Status: $healthyComponents/4 components ready" -ForegroundColor Cyan
+                            return $true
+                        }
+                    } catch {
+                        # Health endpoint not ready yet, continue waiting
+                    }
                 }
             } else {
                 # Use curl for non-Windows platforms
@@ -141,7 +175,7 @@ function Test-ServiceHealth {
     return $false
 }
 
-# Display service information
+# Display service information with Phase 4 dashboard
 function Show-ServiceInfo {
     param([int]$Port = 8000)
     
@@ -175,13 +209,19 @@ function Show-ServiceInfo {
         }
     }
     
-    Write-Host "`n📚 Documentation:" -ForegroundColor Cyan
+    Write-Host "`n📚 API Documentation:" -ForegroundColor Cyan
     Write-Host "   http://localhost:${Port}/docs" -ForegroundColor White
-    Write-Host "   http://localhost:${Port}/health" -ForegroundColor White
+    Write-Host "   http://localhost:${Port}/api/health" -ForegroundColor White
     
-    Write-Host "`n🛠️  Management:" -ForegroundColor Cyan
+    Write-Host "`n🚀 Phase 4 Services:" -ForegroundColor Cyan
+    Write-Host "   � Service Dashboard: .\scripts\service-status.ps1" -ForegroundColor White
+    Write-Host "   🔄 Continuous Monitor: .\scripts\service-status.ps1 -Continuous" -ForegroundColor White
+    Write-Host "   📋 Detailed View: .\scripts\service-status.ps1 -Detailed" -ForegroundColor White
+    
+    Write-Host "`n�🛠️  Management:" -ForegroundColor Cyan
     Write-Host "   Stop: Ctrl+C" -ForegroundColor White
     Write-Host "   Logs: Check terminal output" -ForegroundColor White
+    Write-Host "   Status: .\scripts\service-status.ps1" -ForegroundColor White
 }
 
 # Main execution

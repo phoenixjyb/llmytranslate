@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core.config import get_settings
 from .core.network import NetworkManager
-from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management, file_upload, tts, background_music
+from .api.routes import translation, health, admin, discovery, optimized, chatbot, user_management, file_upload, tts, background_music, phase4_status
 from .api.routes import voice_chat as voice_chat_routes
 from .api.routes import phone_call as phone_call_routes
 
@@ -113,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(voice_chat_routes.router)  # Add voice chat routes
     app.include_router(phone_call_routes.router)  # Add phone call routes
     app.include_router(background_music.router, prefix="/api")  # Add background music routes
+    app.include_router(phase4_status.router)  # Add Phase 4 status monitoring routes
     
     # Mount static files for web interface BEFORE other routes
     web_dir = Path(__file__).parent.parent / "web"

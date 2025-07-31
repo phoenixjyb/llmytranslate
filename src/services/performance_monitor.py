@@ -405,6 +405,45 @@ class PerformanceMonitor:
                 recommendations.append("High CPU usage detected - consider load balancing")
         
         return recommendations
+    
+    def get_current_metrics(self) -> Dict[str, Any]:
+        """Get current performance metrics summary"""
+        try:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "call_metrics": {
+                    "total_calls": len(self.call_metrics),
+                    "recent_calls": len([m for m in self.call_metrics 
+                                       if datetime.fromisoformat(m["timestamp"]) > datetime.now() - timedelta(hours=1)]),
+                    "average_duration": sum(m["duration"] for m in self.call_metrics) / max(len(self.call_metrics), 1)
+                },
+                "performance_metrics": {
+                    "stt_average": sum(m["duration"] for m in self.stt_metrics) / max(len(self.stt_metrics), 1),
+                    "llm_average": sum(m["duration"] for m in self.llm_metrics) / max(len(self.llm_metrics), 1),
+                    "tts_average": sum(m["duration"] for m in self.tts_metrics) / max(len(self.tts_metrics), 1)
+                },
+                "quality_metrics": self.quality_metrics.copy(),
+                "system_status": self.system_metrics[-1] if self.system_metrics else {}
+            }
+        except Exception as e:
+            logger.error(f"Error getting current metrics: {e}")
+            return {"error": str(e), "timestamp": datetime.now().isoformat()}
+    
+    def get_total_interactions(self) -> int:
+        """Get total number of interactions processed"""
+        return len(self.call_metrics)
+    
+    def get_average_response_time(self) -> float:
+        """Get average response time across all components"""
+        if not self.llm_metrics:
+            return 0.0
+        return sum(m["duration"] for m in self.llm_metrics) / len(self.llm_metrics)
+    
+    def get_error_rate(self) -> float:
+        """Get error rate percentage"""
+        if self.quality_metrics["total_calls"] == 0:
+            return 0.0
+        return (self.quality_metrics["failed_calls"] / self.quality_metrics["total_calls"]) * 100
 
 # Global instance
 performance_monitor = PerformanceMonitor()

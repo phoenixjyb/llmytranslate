@@ -382,6 +382,102 @@ class QualityMonitor:
                 distribution[quality] += 1
         
         return distribution
+    
+    def get_quality_summary(self) -> Dict[str, Any]:
+        """Get comprehensive quality summary for status monitoring"""
+        try:
+            summary = {
+                "timestamp": datetime.now().isoformat(),
+                "overall_quality": self.overall_quality_level.value,
+                "service_health": {service: health.value for service, health in self.service_health.items()},
+                "quality_metrics": {
+                    "total_assessments": sum(len(history) for history in self.quality_history.values()),
+                    "recent_quality_trend": self.get_quality_trend(),
+                    "quality_distribution": self.get_quality_distribution()
+                },
+                "performance_summary": self.get_performance_summary(),
+                "service_status": {
+                    "healthy_services": sum(1 for h in self.service_health.values() if h == ServiceHealth.HEALTHY),
+                    "total_services": len(self.service_health),
+                    "degraded_services": [service for service, health in self.service_health.items() 
+                                        if health == ServiceHealth.DEGRADED]
+                }
+            }
+            return summary
+        except Exception as e:
+            logger.error(f"Error getting quality summary: {e}")
+            return {"error": str(e), "timestamp": datetime.now().isoformat()}
+    
+    def get_current_quality_level(self) -> QualityLevel:
+        """Get current overall quality level"""
+        return self.overall_quality_level
+    
+    def get_quality_trend(self) -> str:
+        """Get quality trend direction"""
+        try:
+            # Analyze recent quality history to determine trend
+            recent_cutoff = datetime.now() - timedelta(hours=1)
+            all_recent = []
+            
+            for history in self.quality_history.values():
+                recent = [r for r in history if datetime.fromisoformat(r["timestamp"]) > recent_cutoff]
+                all_recent.extend(recent)
+            
+            if len(all_recent) < 5:
+                return "insufficient_data"
+            
+            # Sort by timestamp and analyze trend
+            all_recent.sort(key=lambda x: x["timestamp"])
+            
+            # Compare first half vs second half quality scores
+            mid_point = len(all_recent) // 2
+            first_half = all_recent[:mid_point]
+            second_half = all_recent[mid_point:]
+            
+            first_avg = sum(self._quality_to_score(r.get("quality", "poor")) for r in first_half) / len(first_half)
+            second_avg = sum(self._quality_to_score(r.get("quality", "poor")) for r in second_half) / len(second_half)
+            
+            if second_avg > first_avg + 0.5:
+                return "improving"
+            elif second_avg < first_avg - 0.5:
+                return "declining"
+            else:
+                return "stable"
+                
+        except Exception as e:
+            logger.error(f"Error calculating quality trend: {e}")
+            return "unknown"
+    
+    def get_total_assessments(self) -> int:
+        """Get total number of quality assessments performed"""
+        return sum(len(history) for history in self.quality_history.values())
+    
+    def get_quality_distribution(self) -> Dict[str, int]:
+        """Get distribution of quality levels across all services"""
+        try:
+            distribution = {"excellent": 0, "good": 0, "acceptable": 0, "poor": 0, "unacceptable": 0}
+            
+            for history in self.quality_history.values():
+                for record in history:
+                    quality = record.get("quality", "unacceptable")
+                    if quality in distribution:
+                        distribution[quality] += 1
+            
+            return distribution
+        except Exception as e:
+            logger.error(f"Error calculating quality distribution: {e}")
+            return {"excellent": 0, "good": 0, "acceptable": 0, "poor": 0, "unacceptable": 0}
+    
+    def _quality_to_score(self, quality: str) -> float:
+        """Convert quality level to numeric score for trend analysis"""
+        scores = {
+            "excellent": 5.0,
+            "good": 4.0,
+            "acceptable": 3.0,
+            "poor": 2.0,
+            "unacceptable": 1.0
+        }
+        return scores.get(quality, 1.0)
 
 # Global instance
 quality_monitor = QualityMonitor()

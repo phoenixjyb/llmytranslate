@@ -364,6 +364,87 @@ class ConnectionPoolManager:
         self.pool_configs[ServiceType.WHISPER].retry_attempts = 2
         
         logger.info("Connection pools optimized for phone call workloads")
+    
+    def get_pool_statistics(self) -> Dict[str, Any]:
+        """Get comprehensive pool statistics for monitoring"""
+        try:
+            stats = {
+                "timestamp": datetime.now().isoformat(),
+                "total_pools": len(self.pools),
+                "pool_details": {},
+                "overall_health": True
+            }
+            
+            for service_type, pool_stats in self.pool_stats.items():
+                service_name = service_type.value
+                config = self.pool_configs.get(service_type, ConnectionPoolConfig())
+                
+                pool_detail = {
+                    "service_type": service_name,
+                    "max_connections": config.max_connections,
+                    "active_connections": self.active_connections.get(service_type, 0),
+                    "available_connections": config.max_connections - self.active_connections.get(service_type, 0),
+                    "total_requests": pool_stats.get("total_requests", 0),
+                    "successful_requests": pool_stats.get("successful_requests", 0),
+                    "failed_requests": pool_stats.get("failed_requests", 0),
+                    "average_response_time": pool_stats.get("average_response_time", 0.0),
+                    "last_activity": pool_stats.get("last_activity", "never"),
+                    "health_status": "healthy" if service_type in self.pools else "offline"
+                }
+                
+                # Calculate success rate
+                total_reqs = pool_detail["total_requests"]
+                if total_reqs > 0:
+                    pool_detail["success_rate"] = (pool_detail["successful_requests"] / total_reqs) * 100
+                else:
+                    pool_detail["success_rate"] = 100.0
+                
+                # Check if pool is unhealthy
+                if pool_detail["success_rate"] < 80 or service_type not in self.pools:
+                    stats["overall_health"] = False
+                
+                stats["pool_details"][service_name] = pool_detail
+            
+            return stats
+        except Exception as e:
+            logger.error(f"Error getting pool statistics: {e}")
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e),
+                "total_pools": 0,
+                "overall_health": False
+            }
+    
+    def get_total_pools(self) -> int:
+        """Get total number of active connection pools"""
+        return len(self.pools)
+    
+    def get_active_connections(self) -> int:
+        """Get total active connections across all pools"""
+        return sum(self.active_connections.values())
+    
+    def get_available_connections(self) -> int:
+        """Get total available connections across all pools"""
+        total_available = 0
+        for service_type, config in self.pool_configs.items():
+            used = self.active_connections.get(service_type, 0)
+            available = max(0, config.max_connections - used)
+            total_available += available
+        return total_available
+    
+    def get_efficiency_ratio(self) -> float:
+        """Get connection pool efficiency ratio (0.0 to 1.0)"""
+        try:
+            total_successful = sum(stats.get("successful_requests", 0) for stats in self.pool_stats.values())
+            total_requests = sum(stats.get("total_requests", 1) for stats in self.pool_stats.values())
+            
+            if total_requests == 0:
+                return 1.0
+                
+            return total_successful / total_requests
+        except Exception as e:
+            logger.error(f"Error calculating efficiency ratio: {e}")
+            return 0.0
 
 # Global instance
 connection_pool_manager = ConnectionPoolManager()
