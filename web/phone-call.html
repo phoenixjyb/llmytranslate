@@ -1297,7 +1297,14 @@
                     };
                     
                     this.websocket.onmessage = (event) => {
-                        this.handleWebSocketMessage(JSON.parse(event.data));
+                        console.log('WebSocket message received:', event.data);
+                        try {
+                            const data = JSON.parse(event.data);
+                            console.log('Parsed WebSocket message:', data);
+                            this.handleWebSocketMessage(data);
+                        } catch (error) {
+                            console.error('Failed to parse WebSocket message:', error, 'Raw data:', event.data);
+                        }
                     };
                     
                     this.websocket.onerror = (error) => {
@@ -1315,36 +1322,54 @@
             }
 
             setupAudioRecording(stream) {
+                console.log('Setting up audio recording...');
                 this.mediaRecorder = new MediaRecorder(stream, {
                     mimeType: 'audio/webm;codecs=opus'
                 });
 
                 this.mediaRecorder.ondataavailable = (event) => {
+                    console.log('Audio data available:', event.data.size, 'bytes');
                     if (event.data.size > 0) {
                         this.audioChunks.push(event.data);
+                    } else {
+                        console.warn('Received empty audio data');
                     }
                 };
 
                 this.mediaRecorder.onstop = () => {
+                    console.log('MediaRecorder stopped. Audio chunks:', this.audioChunks.length);
                     if (this.audioChunks.length > 0) {
                         const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                        console.log('Sending audio blob of size:', audioBlob.size, 'bytes');
                         this.sendAudioData(audioBlob);
                         this.audioChunks = [];
+                    } else {
+                        console.warn('No audio chunks to send');
                     }
                 };
 
+                this.mediaRecorder.onerror = (event) => {
+                    console.error('MediaRecorder error:', event.error);
+                };
+
                 // Record in shorter chunks for more responsive processing
+                console.log('Starting MediaRecorder...');
                 this.mediaRecorder.start();
                 this.recordingInterval = setInterval(() => {
                     if (this.mediaRecorder.state === 'recording') {
+                        console.log('Cycling MediaRecorder - stop and restart');
                         this.mediaRecorder.stop();
                         this.mediaRecorder.start();
+                    } else {
+                        console.warn('MediaRecorder not in recording state:', this.mediaRecorder.state);
                     }
                 }, 2000); // Send audio every 2 seconds for better responsiveness
             }
 
             sendAudioData(audioBlob) {
+                console.log('sendAudioData called with blob size:', audioBlob.size);
                 if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    console.log('WebSocket is open, preparing to send audio data');
                     // Start the process flow
                     this.startProcessFlow();
                     
@@ -1354,14 +1379,26 @@
                         this.completeListening();
                         
                         const audioData = reader.result.split(',')[1]; // Remove data URL prefix
-                        this.websocket.send(JSON.stringify({
+                        const message = {
                             type: 'audio_data',
                             session_id: this.currentSessionId,
-                            audio: audioData,
+                            audio_data: audioData,
                             timestamp: Date.now()
-                        }));
+                        };
+                        console.log('Sending WebSocket message:', {
+                            type: message.type,
+                            session_id: message.session_id,
+                            audio_data_length: audioData ? audioData.length : 0,
+                            timestamp: message.timestamp
+                        });
+                        this.websocket.send(JSON.stringify(message));
+                    };
+                    reader.onerror = (error) => {
+                        console.error('FileReader error:', error);
                     };
                     reader.readAsDataURL(audioBlob);
+                } else {
+                    console.error('WebSocket not ready. State:', this.websocket ? this.websocket.readyState : 'null');
                 }
             }
 

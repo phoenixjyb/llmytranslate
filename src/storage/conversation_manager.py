@@ -259,6 +259,19 @@ class ConversationManager:
             logger.error(f"Failed to clear conversation {conversation_id}: {e}")
             return False
     
+    def save_conversation(self, conversation_id: str) -> bool:
+        """Public method to save a conversation to persistent storage."""
+        try:
+            if conversation_id in self._active_conversations:
+                self._save_conversation(conversation_id)
+                return True
+            else:
+                logger.warning(f"Conversation {conversation_id} not found in active conversations")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to save conversation {conversation_id}: {e}")
+            return False
+    
     def cleanup_expired_conversations(self, max_age_hours: int = 24) -> int:
         """Cleanup conversations older than specified hours."""
         cutoff_time = datetime.utcnow() - timedelta(hours=max_age_hours)

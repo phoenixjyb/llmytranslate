@@ -103,15 +103,15 @@ class OllamaClient:
         Simple chat completion for voice chat - direct Ollama API call using requests.
         """
         start_time = time.time()
-        logger.info(f"🔵 chat_completion called with message: '{message[:50]}...'")
-        print(f"🔵 OLLAMA DEBUG: chat_completion called with message: '{message[:50]}...'")
+        logger.info(f"[OLLAMA] chat_completion called with message: '{message[:50]}...'")
+        print(f"[OLLAMA] DEBUG: chat_completion called with message: '{message[:50]}...'")
         
         try:
             if model is None:
                 model = self.model_name
                 
-            logger.info(f"🔵 Using model: {model}, base_url: {self.base_url}")
-            print(f"🔵 OLLAMA DEBUG: Using model: {model}, base_url: {self.base_url}")
+            logger.info(f"[OLLAMA] Using model: {model}, base_url: {self.base_url}")
+            print(f"[OLLAMA] DEBUG: Using model: {model}, base_url: {self.base_url}")
             
             # Use requests library like other working methods
             url = f"{self.base_url}/api/generate"
@@ -127,17 +127,17 @@ class OllamaClient:
             }
             
             # Make direct HTTP call using requests
-            logger.info(f"🔵 Making POST request to: {url}")
-            print(f"🔵 OLLAMA DEBUG: Making POST request to: {url}")
+            logger.info(f"[OLLAMA] Making POST request to: {url}")
+            print(f"[OLLAMA] DEBUG: Making POST request to: {url}")
             response = requests.post(url, json=payload, timeout=90.0)  # Increased timeout to 90 seconds for queuing
             processing_time = time.time() - start_time
-            logger.info(f"🔵 Request completed in {processing_time:.3f}s, status: {response.status_code}")
-            print(f"🔵 OLLAMA DEBUG: Request completed in {processing_time:.3f}s, status: {response.status_code}")
+            logger.info(f"[OLLAMA] Request completed in {processing_time:.3f}s, status: {response.status_code}")
+            print(f"[OLLAMA] DEBUG: Request completed in {processing_time:.3f}s, status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"🔵 Response received: {len(result.get('response', ''))} chars")
-                print(f"🔵 OLLAMA DEBUG: Response received: {len(result.get('response', ''))} chars")
+                logger.info(f"[OLLAMA] Response received: {len(result.get('response', ''))} chars")
+                print(f"[OLLAMA] DEBUG: Response received: {len(result.get('response', ''))} chars")
                 return {
                     "success": True,
                     "response": result.get("response", ""),

@@ -253,6 +253,24 @@ def create_app() -> FastAPI:
             </body></html>
             """, status_code=404)
     
+    # Serve audio test interface for debugging
+    @app.get("/audio-test.html", response_class=HTMLResponse)
+    async def audio_test():
+        web_dir = Path(__file__).parent.parent / "web"
+        audio_test_html = web_dir / "audio-test.html"
+        
+        if audio_test_html.exists():
+            return HTMLResponse(content=audio_test_html.read_text(encoding='utf-8'))
+        else:
+            return HTMLResponse(content="""
+            <!DOCTYPE html><html><head><title>Audio Test Not Found</title></head>
+            <body style="font-family: Arial, sans-serif; text-align: center; margin: 50px;">
+                <h1>Audio Test Interface Not Found</h1>
+                <p>The audio-test.html file is missing. Please ensure the web interface is properly installed.</p>
+                <p><a href="/web/audio-test.html">Try /web/audio-test.html</a> | <a href="/">Go to Main Page</a></p>
+            </body></html>
+            """, status_code=404)
+    
     # Serve entrance page at root
     @app.get("/", response_class=HTMLResponse)
     async def root():

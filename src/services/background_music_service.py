@@ -325,18 +325,6 @@ class BackgroundMusicService:
         except Exception as e:
             logger.error(f"Failed to generate {style} ambient audio: {e}")
             return None
-            # In a more advanced implementation, we could trim or loop the audio
-            return {
-                "name": track["name"],
-                "audio_data": track.get("audio_data"),
-                "format": track.get("format", "wav"),
-                "volume": track.get("volume", 0.3),
-                "duration": min(track.get("duration", 10.0), duration)
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get background music: {e}")
-            return None
     
     async def health_check(self) -> Dict[str, Any]:
         """Check background music service health."""

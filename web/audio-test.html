@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Test - Debug Phone Call Audio Issues</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        
+        .test-section {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        #log {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.warning { background: #fff3cd; color: #856404; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>Audio Capture Test</h1>
+    <p>This page tests audio capture functionality to debug phone call issues.</p>
+    
+    <div class="test-section">
+        <h2>1. Microphone Permissions Test</h2>
+        <button id="testPermissions">Test Microphone Permissions</button>
+        <div id="permissionStatus" class="status info">Click the button to test microphone access.</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. MediaRecorder Test</h2>
+        <button id="startRecording" disabled>Start Recording</button>
+        <button id="stopRecording" disabled>Stop Recording</button>
+        <button id="testWebSocket" disabled>Test WebSocket</button>
+        <div id="recordingStatus" class="status info">Grant microphone permissions first.</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. WebSocket Test</h2>
+        <div id="websocketStatus" class="status info">WebSocket not connected.</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Debug Log</h2>
+        <button id="clearLog">Clear Log</button>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        class AudioTester {
+            constructor() {
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.stream = null;
+                this.websocket = null;
+                this.sessionId = 'test-' + Date.now();
+                
+                this.initUI();
+            }
+            
+            initUI() {
+                document.getElementById('testPermissions').addEventListener('click', () => this.testPermissions());
+                document.getElementById('startRecording').addEventListener('click', () => this.startRecording());
+                document.getElementById('stopRecording').addEventListener('click', () => this.stopRecording());
+                document.getElementById('testWebSocket').addEventListener('click', () => this.testWebSocket());
+                document.getElementById('clearLog').addEventListener('click', () => this.clearLog());
+            }
+            
+            log(message) {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEl = document.getElementById('log');
+                logEl.textContent += `[${timestamp}] ${message}\n`;
+                logEl.scrollTop = logEl.scrollHeight;
+                console.log(message);
+            }
+            
+            setStatus(elementId, message, type = 'info') {
+                const el = document.getElementById(elementId);
+                el.textContent = message;
+                el.className = `status ${type}`;
+            }
+            
+            clearLog() {
+                document.getElementById('log').textContent = '';
+            }
+            
+            async testPermissions() {
+                this.log('Testing microphone permissions...');
+                try {
+                    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    this.log('✅ Microphone permission granted');
+                    this.setStatus('permissionStatus', 'Microphone access granted', 'success');
+                    
+                    // Enable recording buttons
+                    document.getElementById('startRecording').disabled = false;
+                    document.getElementById('testWebSocket').disabled = false;
+                    
+                    // Log audio track info
+                    const audioTracks = this.stream.getAudioTracks();
+                    this.log(`Audio tracks found: ${audioTracks.length}`);
+                    audioTracks.forEach((track, index) => {
+                        this.log(`Track ${index}: ${track.label}, enabled: ${track.enabled}`);
+                    });
+                    
+                } catch (error) {
+                    this.log('❌ Microphone permission denied: ' + error.message);
+                    this.setStatus('permissionStatus', 'Microphone access denied: ' + error.message, 'error');
+                }
+            }
+            
+            startRecording() {
+                if (!this.stream) {
+                    this.log('❌ No audio stream available');
+                    return;
+                }
+                
+                this.log('Setting up MediaRecorder...');
+                try {
+                    this.mediaRecorder = new MediaRecorder(this.stream, {
+                        mimeType: 'audio/webm;codecs=opus'
+                    });
+                    
+                    this.audioChunks = [];
+                    
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        this.log(`Audio data available: ${event.data.size} bytes`);
+                        if (event.data.size > 0) {
+                            this.audioChunks.push(event.data);
+                        } else {
+                            this.log('⚠️ Empty audio data received');
+                        }
+                    };
+                    
+                    this.mediaRecorder.onstop = () => {
+                        this.log(`MediaRecorder stopped. Chunks: ${this.audioChunks.length}`);
+                        if (this.audioChunks.length > 0) {
+                            const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                            this.log(`Audio blob created: ${audioBlob.size} bytes`);
+                            this.processAudioBlob(audioBlob);
+                        } else {
+                            this.log('⚠️ No audio chunks to process');
+                        }
+                    };
+                    
+                    this.mediaRecorder.onerror = (event) => {
+                        this.log('❌ MediaRecorder error: ' + event.error);
+                    };
+                    
+                    this.log('Starting MediaRecorder...');
+                    this.mediaRecorder.start();
+                    
+                    document.getElementById('startRecording').disabled = true;
+                    document.getElementById('stopRecording').disabled = false;
+                    this.setStatus('recordingStatus', 'Recording... Speak into the microphone', 'warning');
+                    
+                } catch (error) {
+                    this.log('❌ Failed to start recording: ' + error.message);
+                    this.setStatus('recordingStatus', 'Recording failed: ' + error.message, 'error');
+                }
+            }
+            
+            stopRecording() {
+                if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+                    this.log('Stopping MediaRecorder...');
+                    this.mediaRecorder.stop();
+                    
+                    document.getElementById('startRecording').disabled = false;
+                    document.getElementById('stopRecording').disabled = true;
+                    this.setStatus('recordingStatus', 'Recording stopped. Processing audio...', 'info');
+                } else {
+                    this.log('⚠️ MediaRecorder not recording');
+                }
+            }
+            
+            processAudioBlob(audioBlob) {
+                this.log('Processing audio blob...');
+                
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const audioData = reader.result.split(',')[1]; // Remove data URL prefix
+                    this.log(`Audio data base64 length: ${audioData.length}`);
+                    
+                    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                        this.sendAudioToServer(audioData);
+                    } else {
+                        this.log('WebSocket not connected. Audio data ready to send when connected.');
+                        this.lastAudioData = audioData;
+                    }
+                };
+                
+                reader.onerror = (error) => {
+                    this.log('❌ FileReader error: ' + error);
+                };
+                
+                reader.readAsDataURL(audioBlob);
+            }
+            
+            sendAudioToServer(audioData) {
+                const message = {
+                    type: 'audio_data',
+                    session_id: this.sessionId,
+                    audio_data: audioData,
+                    timestamp: Date.now()
+                };
+                
+                this.log('Sending audio data to server...');
+                this.log(`Message type: ${message.type}, session: ${message.session_id}, data length: ${audioData.length}`);
+                
+                try {
+                    this.websocket.send(JSON.stringify(message));
+                    this.log('✅ Audio data sent to server');
+                } catch (error) {
+                    this.log('❌ Failed to send audio data: ' + error.message);
+                }
+            }
+            
+            async testWebSocket() {
+                this.log('Testing WebSocket connection...');
+                
+                // Dynamically determine WebSocket URL based on current page location
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host;
+                const wsUrl = `${protocol}//${host}/api/phone/stream`;
+                
+                this.log(`Connecting to WebSocket: ${wsUrl}`);
+                
+                try {
+                    this.websocket = new WebSocket(wsUrl);
+                    
+                    this.websocket.onopen = () => {
+                        this.log('✅ WebSocket connected');
+                        this.setStatus('websocketStatus', 'WebSocket connected', 'success');
+                        
+                        // Send session start
+                        const startMessage = {
+                            type: 'session_start',
+                            session_id: this.sessionId,
+                            settings: {}
+                        };
+                        this.websocket.send(JSON.stringify(startMessage));
+                        this.log('Session start message sent');
+                        
+                        // Send any pending audio data
+                        if (this.lastAudioData) {
+                            this.sendAudioToServer(this.lastAudioData);
+                            this.lastAudioData = null;
+                        }
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        this.log('📨 WebSocket message received: ' + event.data);
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.log(`Parsed message type: ${data.type}`);
+                            if (data.text) {
+                                this.log(`Message text: ${data.text}`);
+                            }
+                        } catch (error) {
+                            this.log('Failed to parse message: ' + error.message);
+                        }
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        this.log('❌ WebSocket error: ' + error);
+                        this.setStatus('websocketStatus', 'WebSocket error', 'error');
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        this.log('WebSocket disconnected');
+                        this.setStatus('websocketStatus', 'WebSocket disconnected', 'warning');
+                    };
+                    
+                } catch (error) {
+                    this.log('❌ Failed to create WebSocket: ' + error.message);
+                    this.setStatus('websocketStatus', 'WebSocket failed: ' + error.message, 'error');
+                }
+            }
+        }
+        
+        // Initialize the audio tester when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            new AudioTester();
+        });
+    </script>
+</body>
+</html>

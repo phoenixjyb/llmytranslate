@@ -60,6 +60,9 @@ class PerformanceMonitor:
         self.monitoring_active = False
         self.monitor_thread = None
         
+        # Active sessions tracking
+        self.active_sessions = {}
+        
         logger.info("Performance monitor initialized")
     
     def start_monitoring(self):
@@ -316,6 +319,10 @@ class PerformanceMonitor:
             "recommendations": self._generate_recommendations()
         }
     
+    def get_system_health(self) -> Dict[str, Any]:
+        """Get current system health status (public method)"""
+        return self._get_current_system_health()
+    
     def _get_current_system_health(self) -> Dict[str, Any]:
         """Get current system health status"""
         if not self.system_metrics:
@@ -393,7 +400,7 @@ class PerformanceMonitor:
                 model = m.get("model", "unknown")
                 model_usage[model] = model_usage.get(model, 0) + 1
             
-            if "gemma3:2b" in model_usage and model_usage["gemma3:2b"] > len(recent_llm) * 0.5:
+            if "gemma2:2b" in model_usage and model_usage["gemma2:2b"] > len(recent_llm) * 0.5:
                 recommendations.append("Too many calls using larger model - optimize model selection")
         
         # System recommendations
@@ -444,6 +451,23 @@ class PerformanceMonitor:
         if self.quality_metrics["total_calls"] == 0:
             return 0.0
         return (self.quality_metrics["failed_calls"] / self.quality_metrics["total_calls"]) * 100
+    
+    def get_session_summary(self, session_id: str) -> Dict[str, Any]:
+        """Get performance summary for a specific session"""
+        session_stt = [m for m in self.stt_metrics if m.get("session_id") == session_id]
+        session_llm = [m for m in self.llm_metrics if m.get("session_id") == session_id]
+        session_tts = [m for m in self.tts_metrics if m.get("session_id") == session_id]
+        
+        return {
+            "session_id": session_id,
+            "stt_calls": len(session_stt),
+            "llm_calls": len(session_llm),
+            "tts_calls": len(session_tts),
+            "avg_stt_duration": sum(m["duration"] for m in session_stt) / len(session_stt) if session_stt else 0,
+            "avg_llm_duration": sum(m["duration"] for m in session_llm) / len(session_llm) if session_llm else 0,
+            "avg_tts_duration": sum(m["duration"] for m in session_tts) / len(session_tts) if session_tts else 0,
+            "total_interactions": len(session_stt)
+        }
 
 # Global instance
 performance_monitor = PerformanceMonitor()

@@ -68,7 +68,7 @@ class OptimizedLLMService:
                 "context_window": 2048,
                 "estimated_speed": "very_fast"  # Fast 2B parameter model
             },
-            "gemma3:2b": {
+            "gemma2:2b": {
                 "max_tokens": 200,
                 "temperature": 0.7,
                 "top_p": 0.9,
@@ -304,7 +304,7 @@ class OptimizedLLMService:
             "recommended_models": {
                 "fastest": self.get_optimal_model_for_phone_call(kid_friendly=False),
                 "kid_friendly": self.get_optimal_model_for_phone_call(kid_friendly=True),
-                "fallback": "gemma3:2b"
+                "fallback": "gemma2:2b"
             }
         }
     
@@ -331,7 +331,7 @@ class OptimizedLLMService:
                 "recommended_models": {
                     "fastest": self.get_optimal_model_for_phone_call(kid_friendly=False),
                     "kid_friendly": self.get_optimal_model_for_phone_call(kid_friendly=True),
-                    "fallback": "gemma3:2b"
+                    "fallback": "gemma2:2b"
                 },
                 "performance_metrics": {
                     "success_rate": (getattr(self, 'successful_requests', 0) / max(getattr(self, 'total_requests', 1), 1)) * 100,

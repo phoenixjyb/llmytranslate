@@ -10,6 +10,7 @@ import uuid
 import base64
 import io
 import time
+import re
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
@@ -27,6 +28,7 @@ from ...services.optimized_llm_service import optimized_llm_service
 from ...services.performance_monitor import performance_monitor
 from ...services.quality_monitor import quality_monitor
 from ...services.connection_pool_manager import connection_pool_manager
+from ...services.conversation_flow_manager import conversation_flow_manager
 from ...services.ollama_client import ollama_client
 
 # Phase 4: Service client aliases for optimization handlers
@@ -37,19 +39,69 @@ audio_processor = background_music_service  # Placeholder - needs audio processi
 # Import TTS fallback for when main TTS is not available
 from ...services.simple_tts_fallback import simple_tts_fallback
 
+def clean_text_for_tts(text: str) -> str:
+    """
+    Clean text for TTS by removing emojis, special symbols, and formatting.
+    
+    Args:
+        text: Raw text that may contain emojis and special characters
+        
+    Returns:
+        Cleaned text suitable for TTS synthesis
+    """
+    # Remove emojis and emoticons
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        u"\U00002702-\U000027B0"  # dingbats
+        u"\U000024C2-\U0001F251"
+        "]+", flags=re.UNICODE)
+    
+    text = emoji_pattern.sub('', text)
+    
+    # Remove common markdown formatting
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # **bold** -> bold
+    text = re.sub(r'\*(.*?)\*', r'\1', text)      # *italic* -> italic
+    text = re.sub(r'_(.*?)_', r'\1', text)        # _underline_ -> underline
+    text = re.sub(r'`(.*?)`', r'\1', text)        # `code` -> code
+    
+    # Remove excessive punctuation and symbols
+    text = re.sub(r'[^\w\s\.,!?;:\-\'"()]', ' ', text)  # Keep basic punctuation
+    
+    # Clean up whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Remove leading/trailing punctuation that might confuse TTS
+    text = text.strip('.,!?;:')
+    
+    return text
+
 # Process Status Helper Functions
+async def safe_websocket_send(websocket: WebSocket, data: dict):
+    """Safely send data via WebSocket, checking connection state first."""
+    try:
+        # Check if WebSocket is still connected (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)
+        if websocket.client_state == 1:  # 1 = OPEN
+            await websocket.send_text(json.dumps(data))
+            return True
+        else:
+            logger.warning(f"WebSocket not open (state: {websocket.client_state}), skipping send")
+            return False
+    except Exception as e:
+        logger.error(f"Failed to send WebSocket message: {e}")
+        return False
+
 async def send_process_status(websocket: WebSocket, stage: str, status: str, details: str = ""):
     """Send process status update to the frontend."""
-    try:
-        await websocket.send_text(json.dumps({
-            "type": "process_status",
-            "stage": stage,
-            "status": status,
-            "details": details,
-            "timestamp": datetime.now().isoformat()
-        }))
-    except Exception as e:
-        logger.error(f"Failed to send process status: {e}")
+    await safe_websocket_send(websocket, {
+        "type": "process_status",
+        "stage": stage,
+        "status": status,
+        "details": details,
+        "timestamp": datetime.now().isoformat()
+    })
 
 async def send_stage_active(websocket: WebSocket, stage: str, details: str = ""):
     """Mark a stage as active."""
@@ -99,6 +151,8 @@ class PhoneCallSettings(BaseModel):
     kid_friendly: bool = False
     background_music: bool = True
     voice: str = "default"
+    noise_reduction: bool = False
+    interrupt_detection: bool = False
     
     class Config:
         # Allow extra fields but ignore them
@@ -120,7 +174,9 @@ class PhoneCallSettings(BaseModel):
             "speed": 1.0,
             "kid_friendly": False,
             "background_music": True,
-            "voice": "default"
+            "voice": "default",
+            "noise_reduction": False,
+            "interrupt_detection": False
         }
         
         # Apply defaults for missing or None values
@@ -282,6 +338,9 @@ async def phone_call_websocket(websocket: WebSocket):
             message_type = message.get("type")
             session_id = message.get("session_id")
             
+            # Debug: Log all incoming messages to help diagnose audio input issues
+            logger.info(f"Received WebSocket message: type={message_type}, session_id={session_id}, keys={list(message.keys()) if message else 'None'}")
+            
             if message_type == "session_start":
                 # Phase 4: Enhanced session start with optimization setup
                 await handle_optimized_session_start(websocket, message)
@@ -303,7 +362,15 @@ async def phone_call_websocket(websocket: WebSocket):
                 model = settings.get("model", "gemma2:2b")
                 await optimized_llm_service.warmup_models()
                 
+                # Start proactive conversation management
+                conversation_flow_manager.start_conversation(session_id, websocket)
+                logger.info(f"Started intelligent conversation flow management for session {session_id}")
+                
             elif message_type == "audio_data":
+                # Mark user as speaking when audio data arrives
+                conversation_flow_manager.start_user_speaking(session_id)
+                logger.info(f"Received audio_data message for session {session_id}")
+                
                 # Phase 4: Enhanced audio processing with performance tracking
                 await handle_optimized_audio_data(websocket, message)
                 
@@ -322,6 +389,22 @@ async def phone_call_websocket(websocket: WebSocket):
                 await handle_optimized_session_end(websocket, message, call_start_time)
                 break
                 
+            else:
+                # Handle unknown message types - check if it contains audio data
+                if message.get("audio_data") or message.get("audio"):
+                    logger.info(f"Treating unknown message type '{message_type}' as audio data")
+                    # Mark user as speaking when audio data arrives
+                    conversation_flow_manager.start_user_speaking(session_id)
+                    
+                    # Process as audio data
+                    await handle_optimized_audio_data(websocket, message)
+                else:
+                    logger.warning(f"Unknown message type: {message_type}, keys: {list(message.keys())}")
+                    await safe_websocket_send(websocket, {
+                        "type": "error",
+                        "message": f"Unknown message type: {message_type}"
+                    })
+                
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session: {session_id}")
         # Phase 4: Record disconnection
@@ -329,6 +412,10 @@ async def phone_call_websocket(websocket: WebSocket):
             call_duration = time.time() - call_start_time
             performance_monitor.record_call_end(session_id, success=False)
             performance_monitor.record_audio_issue(session_id, "disconnect", f"Duration: {call_duration:.2f}s")
+            
+            # Clean up conversation flow manager
+            conversation_flow_manager.end_conversation(session_id)
+            
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         
@@ -336,21 +423,34 @@ async def phone_call_websocket(websocket: WebSocket):
         if session_id:
             call_duration = time.time() - call_start_time
             performance_monitor.record_call_end(session_id, success=False)
+            
+            # Clean up conversation flow manager on error
+            conversation_flow_manager.end_conversation(session_id)
             performance_monitor.record_audio_issue(session_id, "websocket_error", f"Error: {str(e)}, Duration: {call_duration:.2f}s")
         
-        await websocket.send_text(json.dumps({
-            "type": "error",
-            "message": f"Connection error: {str(e)}"
-        }))
+        # Only try to send error message if WebSocket is still connected
+        try:
+            if websocket.client_state != 3:  # 3 = DISCONNECTED
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": f"Connection error: {str(e)}"
+                }))
+        except Exception as send_error:
+            logger.warning(f"Failed to send error message: {send_error}")
     finally:
         if session_id:
             phone_manager.end_session(session_id)
+            # Clean up conversation flow management
+            conversation_flow_manager.end_conversation(session_id)
+            logger.info(f"Cleaned up session {session_id}")
 
 # Phase 3 & 4: Helper function for interruptible LLM responses with optimization
 async def get_interruptible_llm_response(session: PhoneCallSession, user_text: str, 
                                         conversation_context: list, background_music_task=None):
     """Get optimized LLM response with interrupt support and performance monitoring."""
     session_id = session.session_id
+    
+    print(f"DEBUG: get_interruptible_llm_response called with user_text: '{user_text}'")  # Explicit debug print
     
     try:
         # Phase 4: Start performance monitoring
@@ -524,8 +624,8 @@ async def handle_audio_data(websocket: WebSocket, message: Dict):
     """Handle incoming audio data for transcription and processing."""
     session_id = message["session_id"]
     
-    # Validate audio data exists
-    if "audio" not in message:
+    # Validate audio data exists - check both possible field names
+    if "audio" not in message and "audio_data" not in message:
         logger.error("Missing audio data in message")
         await websocket.send_text(json.dumps({
             "type": "error", 
@@ -533,7 +633,8 @@ async def handle_audio_data(websocket: WebSocket, message: Dict):
         }))
         return
         
-    audio_data = message["audio"]
+    # Support both field names for backward compatibility
+    audio_data = message.get("audio") or message.get("audio_data")
     timestamp = message.get("timestamp", datetime.now().isoformat())
     
     session = phone_manager.get_session(session_id)
@@ -1191,28 +1292,41 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         await send_stage_completed(websocket, "transfer", "Audio data received")
         await send_stage_active(websocket, "stt", "Converting speech to text...")
         
-        # Decode audio data - handle missing audio_data gracefully
-        if "audio_data" not in message:
-            logger.error("Missing audio_data in message")
+        # Decode audio data - handle missing audio_data gracefully and support both field names
+        audio_data_field = message.get("audio_data") or message.get("audio")
+        if not audio_data_field:
+            logger.error("Missing audio_data or audio field in message")
             await send_stage_error(websocket, "transfer", "Missing audio data")
             await websocket.send_text(json.dumps({
                 "type": "error",
-                "message": "Missing audio data",
+                "message": "Missing audio data (expected 'audio_data' or 'audio' field)",
                 "stage": "transfer"
             }))
             return
             
-        audio_data = base64.b64decode(message["audio_data"])
+        audio_data = base64.b64decode(audio_data_field)
+        
+        # Store audio in conversation flow manager for intelligent processing
+        conversation_flow_manager.process_audio_chunk(session_id, audio_data)
         
         # Phase 4: Record audio processing start (using existing method)
         logger.info(f"Processing audio data: {len(audio_data)} bytes")
+        logger.debug(f"Session settings type: {type(session.settings)}")
+        logger.debug(f"Session settings: {session.settings}")
         
         # Phase 2: Apply noise reduction if enabled
-        if session.settings.noise_reduction:
+        if session.settings.get("noise_reduction", False):
             audio_data = await audio_processor.reduce_noise(audio_data)
         
+        # Check if we should interrupt the user (but still process the audio)
+        should_interrupt = conversation_flow_manager.should_interrupt_user(session_id)
+        if should_interrupt:
+            logger.info(f"Interrupting user for session {session_id}")
+            await conversation_flow_manager.interrupt_user(session_id, websocket)
+            # Continue processing this audio chunk even after interruption
+        
         # Phase 2: Check for interrupts
-        if session.settings.interrupt_detection and interrupt_service.is_ai_thinking(session_id):
+        if session.settings.get("interrupt_detection", False) and interrupt_service.is_ai_thinking(session_id):
             interrupt_detected = await interrupt_service.detect_interrupt(session_id, audio_data)
             if interrupt_detected:
                 logger.info(f"Interrupt detected for session {session_id}")
@@ -1222,26 +1336,56 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         # Phase 4: Optimized Speech-to-Text with performance tracking
         stt_start_time = time.time()
         
-        user_text = await stt_client.transcribe_audio(
+        stt_result = await stt_client.transcribe_audio_file(
             audio_data, 
-            language=session.settings.language,
-            session_context=session_id
+            format="wav",  # Assuming WAV format from browser
+            language=session.settings.get("language", "en")
         )
         
         stt_duration = time.time() - stt_start_time
+        
+        # DEBUG: Print entire STT result
+        print(f"DEBUG: Full STT result: {stt_result}")
+        
+        # Extract text from STT result
+        user_text = stt_result.get("text", "").strip() if stt_result.get("success") else ""
+        print(f"DEBUG: Extracted user_text: '{user_text}'")
+        
+        # Handle STT errors
+        if not stt_result.get("success", False):
+            error_msg = stt_result.get("error", "STT processing failed")
+            logger.error(f"STT failed for session {session_id}: {error_msg}")
+            await send_stage_error(websocket, "stt", error_msg)
+            return
         
         # Phase 4: Record STT performance
         performance_monitor.record_stt_performance(
             session_id=session_id,
             duration=stt_duration,
             audio_length=len(audio_data),
-            success=bool(user_text and user_text.strip()),
-            language=session.settings.language
+            success=bool(user_text and user_text.strip())
         )
         
         if not user_text or not user_text.strip():
             logger.info(f"No speech detected in session {session_id}")
             await send_stage_error(websocket, "stt", "No speech detected")
+            # Mark user as stopped speaking when no text detected
+            conversation_flow_manager.stop_user_speaking(session_id)
+            return
+        
+        # Mark user as stopped speaking and add text to conversation
+        conversation_flow_manager.stop_user_speaking(session_id)
+        conversation_flow_manager.add_user_message(session_id, user_text)
+        
+        # Check if we should respond now or wait for more input
+        should_respond = conversation_flow_manager.should_respond_now(session_id)
+        if not should_respond:
+            logger.info(f"Received user input, but waiting for pause before responding: {user_text[:30]}...")
+            # Send acknowledgment but don't generate response yet
+            await websocket.send_text(json.dumps({
+                "type": "speech_received",
+                "message": f"Received: {user_text[:50]}..."
+            }))
             return
         
         # STT completed successfully
@@ -1249,13 +1393,46 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         await send_stage_active(websocket, "llm", "AI is processing your message...")
         
         logger.info(f"User said ({stt_duration:.2f}s): {user_text}")
+        print(f"DEBUG: User text received: '{user_text}'")  # Explicit debug print
         
-        # Add to conversation history
-        session.conversation_history.append({"role": "user", "content": user_text})
+        # Get conversation context from flow manager (with pruning if needed)
+        conversation_context = conversation_flow_manager.get_conversation_context(session_id)
+        print(f"DEBUG: Full conversation context: {conversation_context}")
+        
+        # Extract the complete user message from conversation context
+        # Get all recent user messages that haven't been responded to yet
+        complete_user_message = ""
+        if conversation_context:
+            # Find all consecutive user messages at the end
+            user_messages = []
+            for msg in reversed(conversation_context):
+                if msg.get("role") == "user":
+                    user_messages.append(msg.get("content", ""))
+                else:
+                    break
+            
+            # Combine user messages in correct order
+            if user_messages:
+                complete_user_message = " ".join(reversed(user_messages))
+        
+        # Use complete message or fallback to current chunk
+        final_user_message = complete_user_message.strip() if complete_user_message.strip() else user_text
+        print(f"DEBUG: Final combined user message: '{final_user_message}'")
+        
+        # Update session conversation history with managed context
+        if conversation_context:
+            session.conversation_history = conversation_context
+        else:
+            # Add to conversation history
+            session.conversation_history.append({"role": "user", "content": user_text})
+        
+        # Update conversation flow with user input
+        conversation_flow_manager.handle_user_input(session_id, final_user_message)
         
         # Phase 4: Get optimized LLM response with enhanced monitoring
+        print(f"DEBUG: About to call LLM with final_user_message: '{final_user_message}'")  # Explicit debug print
         ai_text, llm_duration = await get_interruptible_llm_response(
-            session, user_text, session.conversation_history
+            session, final_user_message, session.conversation_history
         )
         
         if ai_text is None:
@@ -1270,12 +1447,23 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         # Add AI response to conversation
         session.conversation_history.append({"role": "assistant", "content": ai_text})
         
+        # Add AI response to conversation flow manager
+        conversation_flow_manager.add_assistant_message(session_id, ai_text)
+        
+        # Update conversation flow with AI response completion
+        conversation_flow_manager.handle_ai_response(session_id)
+        
         # Phase 4: Optimized Text-to-Speech with performance tracking and fallback
         tts_start_time = time.time()
         
+        # Clean text for TTS (remove emojis, formatting, etc.)
+        clean_text = clean_text_for_tts(ai_text)
+        print(f"DEBUG: Original AI text: '{ai_text}'")
+        print(f"DEBUG: Cleaned text for TTS: '{clean_text}'")
+        
         try:
             audio_response = await tts_client.synthesize_speech(
-                ai_text,
+                clean_text,
                 voice=session.settings.voice,
                 language=session.settings.language,
                 optimization_level=session.settings.get("optimization_level", "balanced")
@@ -1285,7 +1473,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             # Use fallback TTS service
             try:
                 audio_response = await simple_tts_fallback.synthesize_speech(
-                    ai_text,
+                    clean_text,
                     voice=session.settings.voice,
                     language=session.settings.language
                 )
@@ -1308,11 +1496,11 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         
         if not audio_response:
             await send_stage_error(websocket, "tts", "TTS processing failed")
-            await websocket.send_text(json.dumps({
+            await safe_websocket_send(websocket, {
                 "type": "error",
                 "message": "TTS processing failed",
                 "stage": "tts"
-            }))
+            })
             return
         
         # TTS completed successfully
@@ -1325,7 +1513,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         # Send optimized response
         audio_base64 = base64.b64encode(audio_response).decode()
         
-        await websocket.send_text(json.dumps({
+        await safe_websocket_send(websocket, {
             "type": "ai_response",
             "audio": audio_base64,
             "text": ai_text,
@@ -1340,7 +1528,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
                 "model_used": session.settings.get("model", "gemma2:2b"),
                 "performance_score": performance_monitor.get_session_score(session_id)
             }
-        }))
+        })
         
         # Phase 4: Record interaction success (using existing methods)
         # The individual component performance is already recorded above
@@ -1371,11 +1559,11 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         performance_monitor.record_audio_issue(session_id, "processing_error", str(e))
         logger.error(f"Audio processing failed: {e} (duration: {total_duration:.2f}s)")
         
-        await websocket.send_text(json.dumps({
+        await safe_websocket_send(websocket, {
             "type": "error",
             "message": f"Audio processing error: {str(e)}",
             "stage": "processing"
-        }))
+        })
 
 async def handle_optimized_ping(websocket: WebSocket, message: Dict):
     """Enhanced ping handler with performance statistics."""
@@ -1441,6 +1629,9 @@ async def handle_optimized_session_end(websocket: WebSocket, message: Dict, call
         # Cleanup session
         phone_manager.remove_session(session_id)
         interrupt_service.unregister_session(session_id)
+        
+        # Clean up conversation flow manager
+        conversation_flow_manager.end_conversation(session_id)
         
         # Send comprehensive session summary
         await websocket.send_text(json.dumps({

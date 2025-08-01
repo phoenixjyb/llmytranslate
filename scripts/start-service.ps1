@@ -152,7 +152,7 @@ function Test-ServiceHealth {
                 }
             } else {
                 # Use curl for non-Windows platforms
-                $null = curl -s "http://localhost:$Port/health" 2>/dev/null
+                $null = curl -s "http://localhost:$Port/api/health" 2>/dev/null
                 if ($LASTEXITCODE -eq 0) {
                     Write-Host "✅ Service is healthy and responding on port $Port" -ForegroundColor Green
                     return $true

@@ -69,7 +69,7 @@ class QualityMonitor:
             },
             "llm": {
                 "primary": "phi3-mini",
-                "fallbacks": ["gemma2:2b", "llama3.2:1b", "gemma3:2b"],
+                "fallbacks": ["gemma2:2b", "llama3.2:1b", "gemma2:2b"],
                 "emergency": "simple_responses"
             },
             "tts": {
@@ -82,6 +82,9 @@ class QualityMonitor:
         # Health check history
         self.health_history = {}
         self.quality_history = {}
+        
+        # Overall quality level
+        self.overall_quality_level = QualityLevel.GOOD
         
         # Circuit breaker settings
         self.circuit_breakers = {}
