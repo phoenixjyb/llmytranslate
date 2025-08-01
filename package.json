@@ -1,0 +1,163 @@
+{
+  "name": "llmy-cross-platform",
+  "version": "1.0.0",
+  "description": "Cross-platform AI services with React Native and Web",
+  "main": "run.py",
+  "scripts": {
+    "start": "python run.py",
+    "start:web": "cd src/web && npm start",
+    "start:mobile": "cd src/mobile && expo start",
+    "start:dev": "concurrently \"npm run start\" \"npm run start:web\" \"npm run start:mobile\"",
+    
+    "build": "npm run build:shared && npm run build:web && npm run build:mobile",
+    "build:web": "cd src/web && npm run build",
+    "build:mobile": "cd src/mobile && expo build",
+    "build:shared": "tsc --project shared/tsconfig.json",
+    
+    "test": "npm run test:shared && npm run test:web && npm run test:mobile",
+    "test:web": "cd src/web && npm test",
+    "test:mobile": "cd src/mobile && npm test",
+    "test:shared": "jest shared/",
+    "test:integration": "jest tests/integration/",
+    "test:e2e": "playwright test",
+    
+    "lint": "npm run lint:shared && npm run lint:web && npm run lint:mobile",
+    "lint:web": "cd src/web && npm run lint",
+    "lint:mobile": "cd src/mobile && npm run lint", 
+    "lint:shared": "eslint shared/ --ext .ts,.tsx",
+    "lint:fix": "npm run lint:shared -- --fix && npm run lint:web -- --fix && npm run lint:mobile -- --fix",
+    
+    "format": "prettier --write \"shared/**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"shared/**/*.{ts,tsx,js,jsx,json,md}\"",
+    
+    "type-check": "npm run type-check:shared && npm run type-check:web && npm run type-check:mobile",
+    "type-check:shared": "tsc --noEmit --project shared/tsconfig.json",
+    "type-check:web": "cd src/web && npm run type-check",
+    "type-check:mobile": "cd src/mobile && npm run type-check",
+    
+    "sync": "node shared/scripts/sync-platforms.js",
+    "sync:check": "node shared/scripts/sync-platforms.js check",
+    "sync:validate": "node shared/scripts/sync-platforms.js validate",
+    "sync:dry-run": "node shared/scripts/sync-platforms.js sync --dry-run",
+    "sync:force": "node shared/scripts/sync-platforms.js sync --force",
+    "sync:all": "node shared/scripts/sync-platforms.js all",
+    
+    "deps:check": "npm-check-updates",
+    "deps:update": "npm-check-updates -u && npm install",
+    "deps:audit": "npm audit && cd src/web && npm audit && cd ../mobile && npm audit",
+    
+    "deploy": "npm run sync:all && npm run build && npm run deploy:platforms",
+    "deploy:web": "cd src/web && npm run deploy",
+    "deploy:mobile": "cd src/mobile && expo publish",
+    "deploy:platforms": "node shared/scripts/sync-platforms.js deploy",
+    
+    "dev:setup": "npm run deps:install && npm run sync:all",
+    "dev:clean": "rm -rf node_modules src/web/node_modules src/mobile/node_modules shared/dist",
+    "dev:reset": "npm run dev:clean && npm run dev:setup",
+    
+    "deps:install": "npm install && cd src/web && npm install && cd ../mobile && npm install",
+    "postinstall": "npm run sync:check",
+    
+    "precommit": "npm run lint && npm run type-check && npm run test:shared",
+    "prepush": "npm run sync:validate && npm run test",
+    
+    "monitor": "concurrently \"npm run monitor:backend\" \"npm run monitor:web\" \"npm run monitor:mobile\"",
+    "monitor:backend": "nodemon --watch '*.py' --exec 'python run.py'",
+    "monitor:web": "cd src/web && npm start",
+    "monitor:mobile": "cd src/mobile && expo start --tunnel",
+    
+    "docs": "typedoc shared/ --out docs/api",
+    "docs:serve": "http-server docs/api -p 3001",
+    
+    "perf:test": "npm run test:performance",
+    "test:performance": "node performance/test_performance.py",
+    
+    "security": "npm audit && snyk test",
+    "security:fix": "npm audit fix && snyk wizard"
+  },
+  "dependencies": {
+    "concurrently": "^7.6.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "helmet": "^6.1.5",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.16.3",
+    "@typescript-eslint/eslint-plugin": "^5.59.6",
+    "@typescript-eslint/parser": "^5.59.6",
+    "eslint": "^8.40.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-prettier": "^4.2.1",
+    "husky": "^8.0.3",
+    "jest": "^29.5.0",
+    "lint-staged": "^13.2.2",
+    "madge": "^6.1.0",
+    "nodemon": "^2.0.22",
+    "npm-check-updates": "^16.10.12",
+    "playwright": "^1.33.0",
+    "prettier": "^2.8.8",
+    "snyk": "^1.1167.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.1",
+    "typedoc": "^0.24.7",
+    "typescript": "^5.0.4"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged && npm run precommit",
+      "pre-push": "npm run prepush"
+    }
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/shared", "<rootDir>/tests"],
+    "testMatch": [
+      "**/__tests__/**/*.test.ts",
+      "**/?(*.)+(spec|test).ts"
+    ],
+    "collectCoverageFrom": [
+      "shared/**/*.ts",
+      "!shared/**/*.d.ts",
+      "!shared/scripts/**/*"
+    ],
+    "coverageReporters": ["text", "lcov", "html"],
+    "coverageDirectory": "coverage"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/llmy-translate.git"
+  },
+  "keywords": [
+    "ai",
+    "translation",
+    "chatbot",
+    "react-native",
+    "cross-platform",
+    "typescript",
+    "llm",
+    "voice-chat",
+    "tts"
+  ],
+  "author": "LLMy Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/your-username/llmy-translate/issues"
+  },
+  "homepage": "https://github.com/your-username/llmy-translate#readme"
+}

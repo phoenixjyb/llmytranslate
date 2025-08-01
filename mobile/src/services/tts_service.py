@@ -372,25 +372,6 @@ class DualEnvironmentTTSService:
     async def get_health_status(self):
         """Get TTS service health status (alias for health_check)."""
         return await self.health_check()
-    
-    async def get_available_languages(self) -> list:
-        """Get list of available languages for TTS."""
-        if not self.tts_available:
-            return ["en"]  # Fallback to English only
-        
-        # Return common languages supported by most TTS systems
-        return [
-            "en",  # English
-            "zh",  # Chinese
-            "es",  # Spanish
-            "fr",  # French
-            "de",  # German
-            "it",  # Italian
-            "ja",  # Japanese
-            "ko",  # Korean
-            "pt",  # Portuguese
-            "ru"   # Russian
-        ]
 
 # Cached TTS service for backward compatibility
 class CachedTTSService:
@@ -527,11 +508,6 @@ class CachedTTSService:
     async def get_health_status(self):
         """Get TTS service health status (alias for health_check)."""
         return await self.health_check()
-    
-    async def get_available_languages(self):
-        if not self._service:
-            raise TTSError("TTS service not initialized")
-        return await self._service.get_available_languages()
 
 # Legacy compatibility class
 class TTSService:
@@ -561,11 +537,6 @@ class TTSService:
     async def get_health_status(self):
         """Get TTS service health status (alias for health_check)."""
         return await self.health_check()
-    
-    async def get_available_languages(self):
-        if not self._service:
-            raise TTSError("TTS service not initialized")
-        return await self._service.get_available_languages()
     
     async def synthesize_speech_api(self, text: str, language: str = "en", voice: str = "default", speed: float = 1.0, tts_mode: str = "fast"):
         """API wrapper for synthesize_speech."""
