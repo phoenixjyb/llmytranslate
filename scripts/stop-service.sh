@@ -170,7 +170,7 @@ show_service_status() {
     fi
     
     # Check translation service
-    PORT_USED=$(lsof -t -i:8000 2>/dev/null || true)
+    PORT_USED=$(lsof -t -i:8000 2>/dev/null || netstat -tlpn 2>/dev/null | grep ':8000 ' | awk '{print $7}' | cut -d'/' -f1 || true)
     if [ -n "$PORT_USED" ]; then
         echo -e "  🔴 Translation Service: ${YELLOW}⚠️  Port 8000 still in use${NC}"
     else
@@ -180,6 +180,26 @@ show_service_status() {
     # Test service availability
     if curl -s --connect-timeout 2 "http://localhost:8000/api/health" >/dev/null 2>&1; then
         echo -e "  🏥 Health Check: ${YELLOW}⚠️  Service still responding${NC}"
+        
+        # Check Phase 4 components if main service is still running
+        echo -e "\n${CYAN}🚀 Phase 4 Component Status:${NC}"
+        
+        local component_endpoints=(
+            "🧠:Optimized LLM:/api/llm/health"
+            "📊:Performance Monitor:/api/performance/status"
+            "✅:Quality Monitor:/api/quality/status"
+            "🔗:Connection Pool:/api/connections/status"
+        )
+        
+        for component_data in "${component_endpoints[@]}"; do
+            IFS=':' read -r icon name endpoint <<< "$component_data"
+            
+            if curl -s --max-time 2 "http://localhost:8000$endpoint" > /dev/null 2>&1; then
+                echo -e "  $icon $name: ${YELLOW}⚠️  Still running${NC}"
+            else
+                echo -e "  $icon $name: ${GREEN}✅ Stopped${NC}"
+            fi
+        done
     else
         echo -e "  🏥 Health Check: ${GREEN}✅ Connection refused (service stopped)${NC}"
     fi

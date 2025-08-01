@@ -117,7 +117,7 @@ function get_python_executable() {
     exit 1
 }
 
-# Service health check
+# Service health check with Phase 4 component verification
 function test_service_health() {
     local port=${1:-8000}
     local max_attempts=${2:-30}
@@ -125,9 +125,37 @@ function test_service_health() {
     print_info "Checking service health..."
     
     for ((i=1; i<=max_attempts; i++)); do
-        if curl -s "http://localhost:$port/health" > /dev/null 2>&1; then
-            print_success "Service is healthy and responding on port $port"
-            return 0
+        if curl -s "http://localhost:$port/api/health" > /dev/null 2>&1; then
+            # Additional check: verify main health endpoint
+            local health_response=$(curl -s "http://localhost:$port/api/health" 2>/dev/null)
+            if [[ -n "$health_response" ]]; then
+                print_success "Main service is healthy and responding on port $port"
+                
+                # Phase 4: Check service components
+                echo -e "\n${CYAN}🔍 Verifying Phase 4 service components...${NC}"
+                
+                local component_endpoints=(
+                    "🧠:Optimized LLM:/api/llm/health"
+                    "📊:Performance Monitor:/api/performance/status"
+                    "✅:Quality Monitor:/api/quality/status"
+                    "🔗:Connection Pool:/api/connections/status"
+                )
+                
+                local healthy_components=0
+                for component_data in "${component_endpoints[@]}"; do
+                    IFS=':' read -r icon name endpoint <<< "$component_data"
+                    
+                    if curl -s --max-time 2 "http://localhost:$port$endpoint" > /dev/null 2>&1; then
+                        echo -e "  $icon $name: ${GREEN}✅ Healthy${NC}"
+                        ((healthy_components++))
+                    else
+                        echo -e "  $icon $name: ${YELLOW}⚠️ Initializing${NC}"
+                    fi
+                done
+                
+                echo -e "\n${CYAN}🎯 Phase 4 Status: $healthy_components/4 components ready${NC}"
+                return 0
+            fi
         fi
         
         if [[ $i -le 10 ]]; then
@@ -143,7 +171,7 @@ function test_service_health() {
     return 1
 }
 
-# Display service information
+# Display service information with Phase 4 dashboard
 function show_service_info() {
     local port=${1:-8000}
     
@@ -169,13 +197,19 @@ function show_service_info() {
         done
     fi
     
-    echo -e "\n${CYAN}📚 Documentation:${NC}"
+    echo -e "\n${CYAN}📚 API Documentation:${NC}"
     echo -e "   http://localhost:${port}/docs"
-    echo -e "   http://localhost:${port}/health"
+    echo -e "   http://localhost:${port}/api/health"
+    
+    echo -e "\n${CYAN}🚀 Phase 4 Services:${NC}"
+    echo -e "   📊 Service Dashboard: ./scripts/service-status.sh"
+    echo -e "   🔄 Continuous Monitor: ./scripts/service-status.sh --continuous"
+    echo -e "   📋 Detailed View: ./scripts/service-status.sh --detailed"
     
     echo -e "\n${CYAN}🛠️  Management:${NC}"
     echo -e "   Stop: Ctrl+C"
     echo -e "   Logs: Check terminal output"
+    echo -e "   Status: ./scripts/service-status.sh"
 }
 
 # Main execution
