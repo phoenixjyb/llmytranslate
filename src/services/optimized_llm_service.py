@@ -17,21 +17,21 @@ class OptimizedLLMService:
     
     def __init__(self):
         self.model_configs = {
-            # Use actually available models for phone calls
+            # Use actually available models for phone calls with shorter responses
             "gemma3:latest": {  # This model is available
-                "max_tokens": 150,  # Shorter responses for phone calls
+                "max_tokens": 80,  # Reduced for faster phone responses
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "stop_sequences": [".", "!", "?", "\n\n"],
-                "context_window": 2048,
+                "context_window": 1024,  # Reduced context window
                 "estimated_speed": "fast"  # Available model
             },
             "llama3.1:8b": {  # This model is available but larger
-                "max_tokens": 120,
+                "max_tokens": 60,  # Reduced for phone calls
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "stop_sequences": [".", "!", "?", "\n"],
-                "context_window": 1536,
+                "context_window": 768,  # Reduced context window
                 "estimated_speed": "moderate"  # Larger but available
             },
             # Keep original configs for when models become available
@@ -44,19 +44,19 @@ class OptimizedLLMService:
             #     "estimated_speed": "very_fast"  # <2s typical
             # },
             "phi3:mini": {
-                "max_tokens": 120,
+                "max_tokens": 60,  # Reduced for phone calls
                 "temperature": 0.6,
                 "top_p": 0.8,
                 "stop_sequences": [".", "!", "?"],
-                "context_window": 1024,
+                "context_window": 512,  # Reduced context window
                 "estimated_speed": "ultra_fast"  # <1s typical
             },
             "llama3.2:1b": {
-                "max_tokens": 100,
+                "max_tokens": 50,  # Reduced for phone calls
                 "temperature": 0.8,
                 "top_p": 0.85,
                 "stop_sequences": [".", "!", "?", "\n"],
-                "context_window": 1536,
+                "context_window": 768,  # Reduced context window
                 "estimated_speed": "very_fast"
             },
             # Fallback to larger models if needed
@@ -69,11 +69,11 @@ class OptimizedLLMService:
                 "estimated_speed": "very_fast"  # Fast 2B parameter model
             },
             "gemma2:2b": {
-                "max_tokens": 200,
+                "max_tokens": 80,  # Reduced for phone calls
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "stop_sequences": [".", "!", "?", "\n\n"],
-                "context_window": 4096,
+                "context_window": 1024,  # Reduced context window
                 "estimated_speed": "fast"  # 2-4s typical
             }
         }

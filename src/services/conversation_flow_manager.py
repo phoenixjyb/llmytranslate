@@ -31,7 +31,7 @@ class IntelligentConversationManager:
         self.natural_break_detection = True  # Detect natural conversation breaks
         
         # Context management
-        self.max_conversation_turns = 20  # Maximum turns before context reset
+        self.max_conversation_turns = 8  # Reduced for phone calls to prevent latency buildup
         self.max_total_tokens = 4000  # Approximate token limit
         self.context_reset_warning_turns = 18  # Warn before reset
         

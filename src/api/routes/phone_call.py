@@ -2100,6 +2100,15 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         # Get conversation context from flow manager (with pruning if needed)
         conversation_context = conversation_flow_manager.get_conversation_context(session_id)
         
+        # Additional aggressive context trimming for phone calls to reduce latency
+        if len(conversation_context) > 6:  # Keep only last 3 exchanges (6 messages)
+            conversation_context = conversation_context[-6:]
+            logger.debug(f"Trimmed conversation context to {len(conversation_context)} messages for performance")
+        
+        # Log context length for monitoring
+        total_context_chars = sum(len(str(msg.get('content', ''))) for msg in conversation_context)
+        logger.info(f"Conversation context: {len(conversation_context)} messages, {total_context_chars} chars")
+        
         # Extract the complete user message from conversation context
         # Get all recent user messages that haven't been responded to yet
         complete_user_message = ""

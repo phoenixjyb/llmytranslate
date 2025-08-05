@@ -38,25 +38,25 @@ class QualityMonitor:
             "background_music": ServiceHealth.HEALTHY
         }
         
-        # Quality thresholds
+        # Quality thresholds - More lenient for phone calls to reduce unnecessary fallback testing
         self.quality_thresholds = {
             "stt": {
                 "excellent": 1.0,
-                "good": 2.0,
-                "acceptable": 3.0,
-                "poor": 5.0
+                "good": 3.0,
+                "acceptable": 6.0,
+                "poor": 12.0
             },
             "llm": {
-                "excellent": 1.0,
-                "good": 2.0,
-                "acceptable": 4.0,
-                "poor": 8.0
+                "excellent": 3.0,
+                "good": 6.0,
+                "acceptable": 12.0,
+                "poor": 20.0
             },
             "tts": {
-                "excellent": 1.5,
-                "good": 2.5,
-                "acceptable": 4.0,
-                "poor": 6.0
+                "excellent": 2.0,
+                "good": 5.0,
+                "acceptable": 10.0,
+                "poor": 16.0
             }
         }
         
@@ -82,6 +82,10 @@ class QualityMonitor:
         # Health check history
         self.health_history = {}
         self.quality_history = {}
+        
+        # Fallback testing cooldown to prevent spam
+        self.last_fallback_test = {}
+        self.fallback_test_cooldown = 60  # 60 seconds between tests
         
         # Overall quality level
         self.overall_quality_level = QualityLevel.GOOD
@@ -186,9 +190,18 @@ class QualityMonitor:
     
     def _should_trigger_fallback(self, service: str) -> bool:
         """Determine if a fallback should be triggered"""
+        # Check cooldown period to prevent spam testing
+        import time
+        current_time = time.time()
+        if service in self.last_fallback_test:
+            time_since_last = current_time - self.last_fallback_test[service]
+            if time_since_last < self.fallback_test_cooldown:
+                logger.debug(f"Skipping fallback test for {service} (cooldown: {time_since_last:.1f}s)")
+                return False
+        
         health = self.service_health.get(service, ServiceHealth.HEALTHY)
         
-        # Trigger fallback if service is unhealthy or offline
+        # Only trigger fallback if service is truly unhealthy or offline (not just degraded)
         if health in [ServiceHealth.UNHEALTHY, ServiceHealth.OFFLINE]:
             return True
         
@@ -202,6 +215,11 @@ class QualityMonitor:
     
     async def _trigger_fallback(self, service: str):
         """Trigger fallback for a service"""
+        import time
+        
+        # Record fallback test time
+        self.last_fallback_test[service] = time.time()
+        
         fallback_config = self.fallback_configs.get(service)
         if not fallback_config:
             logger.warning(f"No fallback configuration for service: {service}")
@@ -232,14 +250,26 @@ class QualityMonitor:
         """Test if a fallback service is available"""
         try:
             if service_type == "llm":
-                # Test LLM availability with a simple request
-                from ..services.optimized_llm_service import optimized_llm_service
-                result = await optimized_llm_service.fast_completion(
-                    message="test",
-                    model=service_name,
-                    timeout=3.0
-                )
-                return result.get("success", False)
+                # Lightweight LLM availability test - just check if model exists
+                # instead of doing a full completion to avoid performance impact
+                import aiohttp
+                import asyncio
+                
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        # Quick check if Ollama service is responding
+                        async with session.get('http://localhost:11434/api/tags', timeout=2) as response:
+                            if response.status == 200:
+                                tags_data = await response.json()
+                                available_models = [model['name'] for model in tags_data.get('models', [])]
+                                # Check if the specific model is available
+                                model_available = any(service_name in model for model in available_models)
+                                logger.debug(f"LLM availability test for {service_name}: {model_available}")
+                                return model_available
+                            return False
+                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    logger.debug(f"LLM service unavailable for {service_name}")
+                    return False
             
             elif service_type == "stt":
                 # Test STT availability
