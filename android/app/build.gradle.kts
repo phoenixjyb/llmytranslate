@@ -1,8 +1,9 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.dagger.hilt.android")
-    kotlin("kapt")
+    // Removed KAPT dependencies for Java 21 compatibility
+    // id("com.google.dagger.hilt.android")  
+    // kotlin("kapt")
 }
 
 android {

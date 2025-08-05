@@ -43,7 +43,7 @@ class OptimizedLLMService:
             #     "context_window": 2048,
             #     "estimated_speed": "very_fast"  # <2s typical
             # },
-            "phi3-mini": {
+            "phi3:mini": {
                 "max_tokens": 120,
                 "temperature": 0.6,
                 "top_p": 0.8,
@@ -93,30 +93,7 @@ class OptimizedLLMService:
     def get_optimal_model_for_phone_call(self, kid_friendly: bool = False, 
                                        language: str = "en") -> str:
         """Select the best model for phone call based on requirements"""
-        # For kid-friendly mode, prefer more reliable models
-        if kid_friendly:
-            if self.is_model_available("gemma2:2b"):
-                return "gemma2:2b"
-            elif self.is_model_available("gemma3:latest"):
-                return "gemma3:latest"
-            elif self.is_model_available("llama3.1:8b"):
-                return "llama3.1:8b"
-        
-        # For general phone calls, prioritize available models
-        # Check available models starting with fastest
-        if self.is_model_available("gemma2:2b"):
-            return "gemma2:2b"
-        elif self.is_model_available("gemma3:latest"):
-            return "gemma3:latest"
-        elif self.is_model_available("llama3.1:8b"):
-            return "llama3.1:8b"
-        elif self.is_model_available("phi3-mini"):
-            return "phi3-mini"
-        elif self.is_model_available("llama3.2:1b"):
-            return "llama3.2:1b"
-            return "llama3.2:1b"
-        
-        # Fallback to larger model
+        # Always use gemma2:2b to avoid model switching overhead
         return "gemma2:2b"
     
     def is_model_available(self, model_name: str) -> bool:
@@ -354,18 +331,19 @@ class OptimizedLLMService:
         logger.info("Warming up models for phone calls...")
         warmup_results = {}
         
-        for model_name in ["phi3-mini", "gemma2:2b", "llama3.2:1b"]:
-            try:
-                # Send a simple warmup request
-                result = await self.fast_completion(
-                    message="Hello",
-                    model=model_name,
-                    timeout=15.0  # Longer timeout for warmup
-                )
-                warmup_results[model_name] = result.get("success", False)
-                logger.info(f"Model {model_name} warmed up: {warmup_results[model_name]}")
-                
-            except Exception as e:
+        # Only warm up gemma2:2b to avoid model switching
+        model_name = "gemma2:2b"
+        try:
+            # Send a simple warmup request
+            result = await self.fast_completion(
+                message="Hello",
+                model=model_name,
+                timeout=15.0  # Longer timeout for warmup
+            )
+            warmup_results[model_name] = result.get("success", False)
+            logger.info(f"Model {model_name} warmed up: {warmup_results[model_name]}")
+            
+        except Exception as e:
                 warmup_results[model_name] = False
                 logger.warning(f"Failed to warm up {model_name}: {e}")
         

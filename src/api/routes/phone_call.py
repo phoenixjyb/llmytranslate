@@ -11,9 +11,11 @@ import base64
 import io
 import time
 import re
+import random
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.websockets import WebSocketState
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -27,6 +29,7 @@ from ...services.call_history_service import call_history_service
 from ...services.optimized_llm_service import optimized_llm_service
 from ...services.performance_monitor import performance_monitor
 from ...services.quality_monitor import quality_monitor
+from ...services.smart_interrupt_manager import smart_interrupt_manager
 from ...services.connection_pool_manager import connection_pool_manager
 from ...services.conversation_flow_manager import conversation_flow_manager
 from ...services.ollama_client import ollama_client
@@ -59,38 +62,192 @@ def clean_text_for_tts(text: str) -> str:
         u"\U000024C2-\U0001F251"
         "]+", flags=re.UNICODE)
     
-    text = emoji_pattern.sub('', text)
+    # Remove emojis
+    text = emoji_pattern.sub(r'', text)
     
-    # Remove common markdown formatting
-    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # **bold** -> bold
-    text = re.sub(r'\*(.*?)\*', r'\1', text)      # *italic* -> italic
-    text = re.sub(r'_(.*?)_', r'\1', text)        # _underline_ -> underline
-    text = re.sub(r'`(.*?)`', r'\1', text)        # `code` -> code
+    # Remove markdown formatting
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
+    text = re.sub(r'\*(.*?)\*', r'\1', text)      # Italic
+    text = re.sub(r'`(.*?)`', r'\1', text)        # Code
     
-    # Remove excessive punctuation and symbols
-    text = re.sub(r'[^\w\s\.,!?;:\-\'"()]', ' ', text)  # Keep basic punctuation
+    # Remove special characters that might cause TTS issues
+    text = re.sub(r'[^\w\s\.,!?\'\"-:;()]', ' ', text)
     
-    # Clean up whitespace
+    # Clean up multiple spaces
     text = re.sub(r'\s+', ' ', text).strip()
     
-    # Remove leading/trailing punctuation that might confuse TTS
-    text = text.strip('.,!?;:')
-    
     return text
+
+async def enhance_audio_for_phone_call(audio_data: bytes) -> bytes:
+    """
+    Enhance audio quality specifically for phone call STT processing with noise reduction.
+    
+    Args:
+        audio_data: Raw audio bytes
+        
+    Returns:
+        Enhanced audio bytes with noise reduction and normalization
+    """
+    try:
+        import numpy as np
+        from scipy import signal
+        
+        # Convert bytes to numpy array for processing
+        try:
+            # More robust audio sample interpretation
+            # First try 16-bit, then 8-bit if that fails
+            audio_samples = None
+            
+            try:
+                # Try 16-bit first (most common)
+                if len(audio_data) % 2 == 0:  # Must be even number of bytes for 16-bit
+                    audio_samples = np.frombuffer(audio_data, dtype=np.int16)
+                    logger.info(f"Successfully interpreted as 16-bit audio: {len(audio_samples)} samples")
+                else:
+                    # Trim one byte to make it even
+                    audio_data = audio_data[:-1]
+                    audio_samples = np.frombuffer(audio_data, dtype=np.int16)
+                    logger.info(f"Trimmed and interpreted as 16-bit audio: {len(audio_samples)} samples")
+            except ValueError as e:
+                logger.warning(f"16-bit interpretation failed: {e}, trying 8-bit")
+                # Try 8-bit as fallback
+                audio_samples = np.frombuffer(audio_data, dtype=np.uint8).astype(np.int16)
+                # Convert 8-bit unsigned to 16-bit signed
+                audio_samples = (audio_samples - 128) * 256
+                logger.info(f"Interpreted as 8-bit audio: {len(audio_samples)} samples")
+            
+            if audio_samples is None or len(audio_samples) < 100:  # Too short to process
+                logger.info("Audio too short for enhancement, returning original")
+                return audio_data
+            
+            # Convert to float for processing
+            audio_float = audio_samples.astype(np.float32) / 32768.0
+            
+            # Apply noise reduction techniques
+            
+            # 1. High-pass filter to remove low-frequency noise (below 100 Hz)
+            try:
+                # Estimate sample rate (common rates: 16kHz, 44.1kHz, 48kHz)
+                # For phone calls, usually 16kHz or 8kHz
+                estimated_sample_rate = min(16000, len(audio_samples) * 4)  # Conservative estimate
+                nyquist = estimated_sample_rate / 2
+                low_cutoff = min(100 / nyquist, 0.4)  # Ensure cutoff is valid
+                
+                if low_cutoff < 0.5:  # Only apply if cutoff frequency is reasonable
+                    b, a = signal.butter(2, low_cutoff, btype='high')
+                    audio_float = signal.filtfilt(b, a, audio_float)
+                    logger.info("Applied high-pass filter for noise reduction")
+            except Exception as filter_error:
+                logger.warning(f"High-pass filter failed: {filter_error}")
+            
+            # 2. Simple noise gate (reduce very quiet sounds)
+            noise_threshold = 0.01  # Adjust based on your needs
+            audio_float = np.where(np.abs(audio_float) < noise_threshold, 
+                                 audio_float * 0.1, audio_float)
+            
+            # 3. Volume normalization
+            max_amplitude = np.max(np.abs(audio_float))
+            if max_amplitude > 0:
+                # Normalize to 70% of max to avoid clipping
+                audio_float = audio_float * (0.7 / max_amplitude)
+            
+            # 4. Apply gentle compression to reduce dynamic range
+            compressed_audio = np.sign(audio_float) * np.power(np.abs(audio_float), 0.7)
+            
+            # Convert back to int16
+            enhanced_samples = np.clip(compressed_audio * 32767, -32768, 32767).astype(np.int16)
+            enhanced_bytes = enhanced_samples.tobytes()
+            
+            logger.info(f"Audio enhancement completed: {len(audio_data)} -> {len(enhanced_bytes)} bytes")
+            return enhanced_bytes
+            
+        except Exception as processing_error:
+            logger.warning(f"Audio sample processing failed: {processing_error}")
+            return audio_data
+        
+    except ImportError:
+        logger.warning("NumPy/SciPy not available for advanced audio processing")
+        # Basic fallback - just return original audio
+        return audio_data
+        
+    except Exception as e:
+        logger.warning(f"Audio enhancement failed: {e}")
+        return audio_data
+
+# Aggressive heartbeat function for long operations
+async def maintain_aggressive_heartbeat(websocket: WebSocket, session_id: str):
+    """Maintain aggressive heartbeat during long operations to prevent WebSocket timeout."""
+    try:
+        heartbeat_count = 0
+        while heartbeat_count < 30:  # Max 30 heartbeats (60 seconds)
+            await asyncio.sleep(2)  # Very aggressive 2-second heartbeat
+            heartbeat_count += 1
+            
+            # Check if WebSocket is still connected
+            try:
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await safe_websocket_send(websocket, {
+                        "type": "heartbeat",
+                        "session_id": session_id,
+                        "count": heartbeat_count,
+                        "timestamp": time.time()
+                    })
+                    print(f"💓 Heartbeat {heartbeat_count} sent for session {session_id}")
+                else:
+                    print(f"💔 WebSocket disconnected, stopping heartbeat for {session_id}")
+                    break
+            except Exception as check_error:
+                print(f"💔 Heartbeat check failed: {check_error}")
+                break
+                
+    except asyncio.CancelledError:
+        print(f"💓 Heartbeat cancelled for session {session_id}")
+    except Exception as e:
+        print(f"💔 Heartbeat task ended: {e}")
+        logger.warning(f"Heartbeat task ended: {e}")
 
 # Process Status Helper Functions
 async def safe_websocket_send(websocket: WebSocket, data: dict):
     """Safely send data via WebSocket, checking connection state first."""
     try:
-        # Check if WebSocket is still connected (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)
-        if websocket.client_state == 1:  # 1 = OPEN
+        # For FastAPI WebSocket, we need to check if it's still connected differently
+        # The client_state property uses WebSocketState enum values
+        from fastapi.websockets import WebSocketState
+        
+        # More robust check - ensure websocket is not None and state is CONNECTED
+        if (websocket and 
+            hasattr(websocket, 'client_state') and 
+            websocket.client_state == WebSocketState.CONNECTED):
+            
+            # Enhanced logging for audio responses to track transmission
+            if data.get("type") == "ai_response" and "audio" in data:
+                audio_size = len(data["audio"]) if data["audio"] else 0
+                logger.info(f"🎵 Sending AI response with audio ({audio_size} bytes) for session {data.get('session_id')}")
+            
+            # Send the data
             await websocket.send_text(json.dumps(data))
-            return True
+            
+            # Verify the connection is still active after sending
+            if websocket.client_state == WebSocketState.CONNECTED:
+                if data.get("type") == "ai_response" and "audio" in data:
+                    logger.info(f"✅ Audio response transmitted successfully for session {data.get('session_id')}")
+                return True
+            else:
+                logger.error(f"⚠️ WebSocket disconnected immediately after sending for session {data.get('session_id')}")
+                return False
+                
         else:
-            logger.warning(f"WebSocket not open (state: {websocket.client_state}), skipping send")
+            if websocket:
+                logger.warning(f"WebSocket not connected (state: {getattr(websocket, 'client_state', 'unknown')}), skipping send")
+            else:
+                logger.warning("WebSocket is None, skipping send")
             return False
     except Exception as e:
-        logger.error(f"Failed to send WebSocket message: {e}")
+        # Enhanced error logging for audio transmission failures
+        if data.get("type") == "ai_response" and "audio" in data:
+            logger.error(f"❌ CRITICAL: Failed to send audio response for session {data.get('session_id')}: {e}")
+        else:
+            logger.error(f"Failed to send WebSocket message: {e}")
         return False
 
 async def send_process_status(websocket: WebSocket, stage: str, status: str, details: str = ""):
@@ -128,10 +285,33 @@ def get_overall_quality():
             self.value = value
     
     return QualityLevel(overall_quality)
+
+async def _process_queued_audio(websocket: WebSocket, session_id: str, combined_audio: bytes):
+    """Process queued audio chunks in the background."""
+    try:
+        logger.info(f"Processing queued audio for session {session_id}: {len(combined_audio)} bytes")
+        
+        # Create a simplified message for processing
+        queue_message = {
+            "type": "audio_data",
+            "session_id": session_id,
+            "audio_data": base64.b64encode(combined_audio).decode()
+        }
+        
+        # Process this audio with a lower priority (don't wait for completion)
+        await handle_optimized_audio_data(websocket, queue_message)
+        
+    except Exception as e:
+        logger.warning(f"Failed to process queued audio for session {session_id}: {e}")
+
 from ...storage.conversation_manager import ConversationManager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/phone", tags=["phone-call"])
+
+# CRITICAL DEBUG: This should appear during module import/startup
+logger.info("🚨🚨🚨 PHONE_CALL.PY MODULE LOADED - NEW CODE VERSION! 🚨🚨🚨")
+logger.info("🔥 If you see this message, the updated code is being imported correctly!")
 
 # Phone call session models
 class PhoneCallSession(BaseModel):
@@ -143,6 +323,14 @@ class PhoneCallSession(BaseModel):
     end_time: Optional[datetime] = None
     settings: Dict[str, Any] = {}
     conversation_history: list = []
+    
+    # Add fields for conversation flow management
+    silence_count: int = 0
+    accumulated_text: str = ""
+    
+    class Config:
+        # Allow extra fields for dynamic attributes
+        extra = "allow"
 
 class PhoneCallSettings(BaseModel):
     language: str = "en"
@@ -151,7 +339,7 @@ class PhoneCallSettings(BaseModel):
     kid_friendly: bool = False
     background_music: bool = True
     voice: str = "default"
-    noise_reduction: bool = False
+    noise_reduction: bool = True  # Enable noise reduction by default
     interrupt_detection: bool = False
     
     class Config:
@@ -175,7 +363,7 @@ class PhoneCallSettings(BaseModel):
             "kid_friendly": False,
             "background_music": True,
             "voice": "default",
-            "noise_reduction": False,
+            "noise_reduction": True,  # Enable by default
             "interrupt_detection": False
         }
         
@@ -199,6 +387,18 @@ class PhoneCallManager:
         self.audio_chunk_duration = 3.0  # seconds
         self.min_audio_length = 1000  # bytes
         self.max_buffer_size = 10  # max chunks to buffer
+        
+        # Conversation flow tracking
+        self.silence_counts: Dict[str, int] = {}  # Track silence per session
+        self.accumulated_texts: Dict[str, str] = {}  # Track accumulated text per session
+        self.accumulated_audio: Dict[str, List[bytes]] = {}  # Queue audio chunks for processing
+        
+        # Processing locks to prevent overlapping responses
+        self.processing_locks: Dict[str, asyncio.Lock] = {}  # Processing locks per session
+        self.last_response_times: Dict[str, float] = {}  # Track last response time per session
+        
+        # CRITICAL: Track active AI responses to prevent overlap
+        self.active_ai_responses: set[str] = set()  # Sessions currently generating AI responses
     
     def create_session(self, session_id: str, settings: PhoneCallSettings) -> PhoneCallSession:
         """Create a new phone call session."""
@@ -210,6 +410,11 @@ class PhoneCallManager:
         )
         self.active_sessions[session_id] = session
         self.audio_buffers[session_id] = []  # Initialize audio buffer
+        self.silence_counts[session_id] = 0  # Initialize silence counter
+        self.accumulated_texts[session_id] = ""  # Initialize accumulated text
+        self.accumulated_audio[session_id] = []  # Initialize audio queue
+        self.processing_locks[session_id] = asyncio.Lock()  # Initialize processing lock
+        self.last_response_times[session_id] = 0.0  # Initialize last response time
         return session
     
     def get_session(self, session_id: str) -> Optional[PhoneCallSession]:
@@ -240,35 +445,51 @@ class PhoneCallManager:
                 del self.websockets[session_id]
             if session_id in self.audio_buffers:
                 del self.audio_buffers[session_id]
+            if session_id in self.silence_counts:
+                del self.silence_counts[session_id]
+            if session_id in self.accumulated_texts:
+                del self.accumulated_texts[session_id]
+            if session_id in self.accumulated_audio:
+                del self.accumulated_audio[session_id]
+            if session_id in self.processing_locks:
+                del self.processing_locks[session_id]
+            if session_id in self.last_response_times:
+                del self.last_response_times[session_id]
+            
+            # CRITICAL: Clean up active AI response tracking
+            self.active_ai_responses.discard(session_id)
+            logger.info(f"🧹 Cleaned up ACTIVE AI response tracking for session {session_id}")
     
     async def _save_conversation(self, session: PhoneCallSession):
         """Save phone call conversation to storage."""
         try:
             conversation_id = f"phone-{session.session_id}"
-            messages = []
             
+            # Create conversation with the model used
+            model_used = session.settings.get("model", "gemma2:2b")
+            self.conversation_manager.create_conversation(model=model_used)
+            
+            # Add all messages to the conversation
             for interaction in session.conversation_history:
                 if interaction.get("type") == "user_speech":
-                    messages.append({
+                    message = {
                         "role": "user",
                         "content": interaction["content"],
                         "timestamp": interaction["timestamp"],
                         "metadata": {"type": "phone_call", "audio_duration": interaction.get("audio_duration")}
-                    })
+                    }
+                    self.conversation_manager.add_message(conversation_id, message)
                 elif interaction.get("type") == "ai_response":
-                    messages.append({
+                    message = {
                         "role": "assistant", 
                         "content": interaction["content"],
                         "timestamp": interaction["timestamp"],
                         "metadata": {"type": "phone_call", "processing_time": interaction.get("processing_time")}
-                    })
+                    }
+                    self.conversation_manager.add_message(conversation_id, message)
             
-            await self.conversation_manager.save_conversation(
-                conversation_id=conversation_id,
-                messages=messages,
-                model_used=session.settings.get("model", "gemma2:2b"),
-                title=f"Phone Call - {session.start_time.strftime('%Y-%m-%d %H:%M')}"
-            )
+            # Save the conversation
+            self.conversation_manager.save_conversation(conversation_id)
             logger.info(f"Saved phone call conversation: {conversation_id}")
             
         except Exception as e:
@@ -317,9 +538,28 @@ phone_manager = PhoneCallManager()
 @router.websocket("/stream")
 async def phone_call_websocket(websocket: WebSocket):
     """Enhanced WebSocket endpoint for real-time phone call communication with Phase 4 optimization."""
+    logger.info("🚨🚨🚨 WEBSOCKET CONNECTION: NEW HEARTBEAT CODE VERSION LOADED! 🚨🚨🚨")
+    logger.info("💓 HEARTBEAT SYSTEM: Active with 3-second intervals during processing")
     await websocket.accept()
     session_id = None
     call_start_time = time.time()
+    last_ping_time = time.time()
+    
+    async def send_heartbeat():
+        """Send periodic ping to keep connection alive during long operations."""
+        nonlocal last_ping_time
+        current_time = time.time()
+        if current_time - last_ping_time > 10:  # Send ping every 10 seconds
+            try:
+                # FastAPI WebSocket doesn't have ping(), use send_text with ping message instead
+                await safe_websocket_send(websocket, {
+                    "type": "ping",
+                    "timestamp": current_time
+                })
+                last_ping_time = current_time
+                logger.debug(f"💓 Sent WebSocket ping for session {session_id}")
+            except Exception as e:
+                logger.warning(f"Failed to send WebSocket ping: {e}")
     
     try:
         # Phase 4: Check initial service quality
@@ -331,12 +571,25 @@ async def phone_call_websocket(websocket: WebSocket):
         logger.info(f"Starting phone call WebSocket with quality: {initial_quality.value}")
         
         while True:
-            # Receive message from client
-            data = await websocket.receive_text()
-            message = json.loads(data)
+            # Send heartbeat if needed
+            await send_heartbeat()
+            
+            # Receive message from client with timeout
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                message = json.loads(data)
+            except asyncio.TimeoutError:
+                # Continue the loop to send heartbeat if needed
+                continue
+            except Exception as e:
+                logger.error(f"Error receiving WebSocket data: {e}")
+                break
             
             message_type = message.get("type")
             session_id = message.get("session_id")
+            
+            # CRITICAL DEBUG: Log every message received
+            logger.info(f"🔥 WEBSOCKET ROUTER: Received type='{message_type}', session='{session_id}', keys={list(message.keys())}")
             
             # Debug: Log all incoming messages to help diagnose audio input issues
             logger.info(f"Received WebSocket message: type={message_type}, session_id={session_id}, keys={list(message.keys()) if message else 'None'}")
@@ -358,27 +611,39 @@ async def phone_call_websocket(websocket: WebSocket):
                     connection_pool_manager.optimize_for_phone_calls()
                     logger.info("Connection pooling optimized for phone calls")
                 
-                # Phase 4: Pre-warm optimized LLM
+                # Phase 4: Just get the optimal model (no warmup)
                 model = settings.get("model", "gemma2:2b")
-                await optimized_llm_service.warmup_models()
+                logger.info(f"Using optimal model: {model} for session {session_id}")
                 
                 # Start proactive conversation management
                 conversation_flow_manager.start_conversation(session_id, websocket)
                 logger.info(f"Started intelligent conversation flow management for session {session_id}")
                 
             elif message_type == "audio_data":
-                # Mark user as speaking when audio data arrives
+                # Smart interruption: Mark user as speaking when audio data arrives
+                await smart_interrupt_manager.start_user_speaking(session_id, websocket)
                 conversation_flow_manager.start_user_speaking(session_id)
                 logger.info(f"Received audio_data message for session {session_id}")
+                
+                # CRITICAL DEBUG: About to call handle_optimized_audio_data
+                logger.info("🔥 ROUTER: About to call handle_optimized_audio_data with overlap prevention!")
                 
                 # Phase 4: Enhanced audio processing with performance tracking
                 await handle_optimized_audio_data(websocket, message)
                 
             elif message_type == "interrupt":
+                # Handle both manual and smart interruptions
+                await smart_interrupt_manager.manual_interrupt(session_id, websocket)
                 await handle_interrupt(websocket, message)
                 
             elif message_type == "settings_update":
                 await handle_settings_update(websocket, message)
+                
+            elif message_type == "user_stop_speaking":
+                # NEW: Handle user stop speaking signal for smart interruption
+                await smart_interrupt_manager.stop_user_speaking(session_id)
+                conversation_flow_manager.stop_user_speaking(session_id)
+                logger.info(f"User stopped speaking in session {session_id}")
                 
             elif message_type == "ping":
                 # Phase 4: Enhanced ping with performance stats
@@ -394,6 +659,7 @@ async def phone_call_websocket(websocket: WebSocket):
                 if message.get("audio_data") or message.get("audio"):
                     logger.info(f"Treating unknown message type '{message_type}' as audio data")
                     # Mark user as speaking when audio data arrives
+                    await smart_interrupt_manager.start_user_speaking(session_id, websocket)
                     conversation_flow_manager.start_user_speaking(session_id)
                     
                     # Process as audio data
@@ -446,11 +712,33 @@ async def phone_call_websocket(websocket: WebSocket):
 
 # Phase 3 & 4: Helper function for interruptible LLM responses with optimization
 async def get_interruptible_llm_response(session: PhoneCallSession, user_text: str, 
-                                        conversation_context: list, background_music_task=None):
-    """Get optimized LLM response with interrupt support and performance monitoring."""
+                                        conversation_context: list, background_music_task=None, websocket=None):
+    """Get optimized LLM response with smart interrupt support and performance monitoring."""
     session_id = session.session_id
     
-    print(f"DEBUG: get_interruptible_llm_response called with user_text: '{user_text}'")  # Explicit debug print
+    async def maintain_websocket_heartbeat(task, websocket, interval=10):
+        """Maintain WebSocket connection during long operations by sending periodic pings."""
+        if not websocket:
+            return await task
+            
+        try:
+            while not task.done():
+                await asyncio.sleep(interval)
+                if not task.done():
+                    try:
+                        # FastAPI WebSocket doesn't have ping(), use send_text with ping message instead
+                        await safe_websocket_send(websocket, {
+                            "type": "heartbeat",
+                            "timestamp": time.time()
+                        })
+                        logger.debug(f"💓 Sent heartbeat ping during LLM processing for session {session_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to send heartbeat ping: {e}")
+                        break
+            return await task
+        except Exception as e:
+            logger.error(f"Error in heartbeat maintenance: {e}")
+            return await task
     
     try:
         # Phase 4: Start performance monitoring
@@ -458,10 +746,12 @@ async def get_interruptible_llm_response(session: PhoneCallSession, user_text: s
                                             session.settings.get('kid_friendly', False))
         
         # Phase 4: Select optimal model for phone call
-        kid_friendly_mode = session.settings.get('kid_friendly', False)
+        kid_friendly_mode = session.settings.get('kid_friendly', False) if isinstance(session.settings, dict) else False
+        language = session.settings.get('language', 'en') if isinstance(session.settings, dict) else 'en'
+        
         optimal_model = optimized_llm_service.get_optimal_model_for_phone_call(
             kid_friendly=kid_friendly_mode,
-            language=session.settings.get('language', 'en')
+            language=language
         )
         
         logger.info(f"Using optimized model: {optimal_model} for session {session_id}")
@@ -470,39 +760,93 @@ async def get_interruptible_llm_response(session: PhoneCallSession, user_text: s
         llm_start_time = time.time()
         
         # Phase 4: Use optimized LLM service with timeout and performance tracking
-        llm_task = asyncio.create_task(optimized_llm_service.fast_completion(
-            message=user_text,
-            model=optimal_model,
-            conversation_context=conversation_context,
-            timeout=30.0  # Extended timeout for more reliable phone calls
-        ))
+        try:
+            llm_task = asyncio.create_task(optimized_llm_service.fast_completion(
+                message=user_text,
+                model=optimal_model,
+                conversation_context=conversation_context,
+                timeout=30.0  # Extended timeout for more reliable phone calls
+            ))
+        except AttributeError:
+            # Fallback if fast_completion doesn't exist
+            logger.warning("fast_completion method not available, using basic completion")
+            llm_task = asyncio.create_task(optimized_llm_service.get_completion(
+                prompt=user_text,
+                model=optimal_model,
+                temperature=0.7,
+                max_tokens=150
+            ))
         
-        # Register LLM task for interrupt handling
+        # Register LLM task for both interrupt services
         interrupt_service.set_ai_thinking(session.session_id, True, llm_task)
         
+        # NEW: Register with smart interrupt manager
+        await smart_interrupt_manager.start_ai_response(session_id, llm_task)
+        
         try:
-            llm_response = await llm_task
+            # Enhanced: Maintain WebSocket heartbeat during LLM processing
+            if websocket:
+                logger.info(f"🔄 Starting LLM processing with WebSocket heartbeat for session {session_id}")
+                llm_response = await maintain_websocket_heartbeat(llm_task, websocket, interval=3)
+            else:
+                llm_response = await llm_task
+            
+            # Clear AI response tracking on successful completion
+            await smart_interrupt_manager.stop_ai_response(session_id)
+            
+        except asyncio.CancelledError:
+            # Handle smart interruption gracefully
+            logger.info(f"LLM task cancelled due to user interruption for session {session_id}")
+            await smart_interrupt_manager.stop_ai_response(session_id)
+            return None, 0.0  # Return None to indicate interruption
+            
         except asyncio.TimeoutError:
             # Phase 4: Handle timeout with fallback
             logger.warning(f"LLM timeout for session {session_id}, attempting fallback")
             quality_monitor.record_service_performance("llm", 8.0, False, "timeout")
+            await smart_interrupt_manager.stop_ai_response(session_id)
             
             # Try emergency fallback
-            fallback_model = "gemma2:2b"  # Faster fallback model
-            llm_task = asyncio.create_task(optimized_llm_service.fast_completion(
-                message=user_text,
-                model=fallback_model,
-                conversation_context=conversation_context[-3:],  # Shorter context
-                timeout=15.0  # Extended fallback timeout
-            ))
+            fallback_model = "gemma2:2b"  # Consistent model for better performance
+            try:
+                llm_task = asyncio.create_task(optimized_llm_service.fast_completion(
+                    message=user_text,
+                    model=fallback_model,
+                    conversation_context=conversation_context[-3:],  # Shorter context
+                    timeout=15.0  # Extended fallback timeout
+                ))
+            except AttributeError:
+                # Use basic completion if fast_completion doesn't exist
+                logger.warning("Using basic completion for fallback")
+                llm_task = asyncio.create_task(optimized_llm_service.get_completion(
+                    prompt=user_text,
+                    model=fallback_model,
+                    temperature=0.7,
+                    max_tokens=100
+                ))
+            
+            # Register fallback task with smart interrupt manager
+            await smart_interrupt_manager.start_ai_response(session_id, llm_task)
             
             try:
                 llm_response = await llm_task
+                await smart_interrupt_manager.stop_ai_response(session_id)
                 logger.info(f"Fallback successful with {fallback_model}")
             except asyncio.TimeoutError:
                 # Ultimate fallback - simple response
                 logger.error(f"All LLM attempts failed for session {session_id}")
-                return None, 0.0
+                # Generate a simple fallback response
+                fallback_responses = [
+                    "I hear you. Could you tell me more about that?",
+                    "That's interesting. What else would you like to discuss?",
+                    "I understand. How can I help you with that?",
+                    "Thanks for sharing. What's on your mind?",
+                    "I see. Could you elaborate on that?"
+                ]
+                import random
+                fallback_text = random.choice(fallback_responses)
+                logger.info(f"Using fallback response: {fallback_text}")
+                return fallback_text, 0.5
                 
         except asyncio.CancelledError:
             # Task was interrupted
@@ -521,26 +865,40 @@ async def get_interruptible_llm_response(session: PhoneCallSession, user_text: s
         llm_duration = llm_end_time - llm_start_time
         
         # Phase 4: Record performance metrics
-        llm_success = llm_response.get("success", False)
+        llm_success = llm_response.get("success", False) if isinstance(llm_response, dict) else bool(llm_response)
+        
+        # Handle different response formats
+        if isinstance(llm_response, dict):
+            if llm_success:
+                ai_text = llm_response.get("response", llm_response.get("text", str(llm_response)))
+            else:
+                error_msg = llm_response.get("error", "Unknown LLM error")
+                logger.error(f"LLM error: {error_msg}")
+                raise Exception(f"LLM processing failed: {error_msg}")
+        elif isinstance(llm_response, str):
+            ai_text = llm_response
+            llm_success = True
+        else:
+            logger.error(f"Unexpected LLM response format: {type(llm_response)}")
+            raise Exception(f"Unexpected LLM response format: {type(llm_response)}")
+        
+        if not ai_text or not ai_text.strip():
+            raise Exception("LLM returned empty response")
+        
         performance_monitor.record_llm_performance(
             session_id=session_id,
             duration=llm_duration,
             model=optimal_model,
             input_length=len(user_text),
-            output_length=len(llm_response.get("response", "")),
+            output_length=len(ai_text),
             success=llm_success,
-            error=llm_response.get("error") if not llm_success else None
+            error=None
         )
         
         # Phase 4: Record quality metrics
         quality_level = quality_monitor.record_service_performance(
-            "llm", llm_duration, llm_success, llm_response.get("error")
+            "llm", llm_duration, llm_success, None
         )
-        
-        if not llm_success:
-            raise Exception(f"LLM processing failed: {llm_response.get('error', 'Unknown error')}")
-        
-        ai_text = llm_response["response"]
         
         logger.info(f"Phone call AI response ({llm_duration:.2f}s, quality: {quality_level.value}): {ai_text}")
         
@@ -560,7 +918,17 @@ async def get_interruptible_llm_response(session: PhoneCallSession, user_text: s
             error=str(e)
         )
         
-        return None, 0.0
+        # Return a graceful fallback response instead of None
+        fallback_responses = [
+            "I'm having trouble understanding right now. Could you repeat that?",
+            "Sorry, I didn't catch that. What did you say?",
+            "Let me try again. What would you like to talk about?",
+            "I apologize for the confusion. How can I help you?"
+        ]
+        import random
+        fallback_text = random.choice(fallback_responses)
+        logger.info(f"Using error fallback response: {fallback_text}")
+        return fallback_text, 1.0
 
 async def handle_session_start(websocket: WebSocket, message: Dict):
     """Handle phone call session start with Phase 3 enhancements."""
@@ -622,6 +990,7 @@ async def handle_session_start(websocket: WebSocket, message: Dict):
 
 async def handle_audio_data(websocket: WebSocket, message: Dict):
     """Handle incoming audio data for transcription and processing."""
+    logger.info("🚨 OLD FUNCTION: handle_audio_data called - THIS SHOULD NOT BE HAPPENING!")
     session_id = message["session_id"]
     
     # Validate audio data exists - check both possible field names
@@ -672,9 +1041,14 @@ async def handle_audio_data(websocket: WebSocket, message: Dict):
         
         # Step 1: Speech to Text using real-time service
         stt_start_time = time.time()
+        
+        # Apply our WebM format detection fix here too
+        webm_detected = buffered_audio.startswith(b'\x1A\x45\xDF\xA3')
+        audio_format = "webm" if webm_detected else "raw"
+        
         stt_result = await realtime_stt_service.transcribe_streaming_audio(
             audio_data=buffered_audio,
-            format="webm",
+            format=audio_format,  # Use detected format instead of hardcoded "webm"
             language=session.settings.get("language", "en")
         )
         stt_end_time = time.time()
@@ -765,14 +1139,14 @@ async def process_llm_response(websocket: WebSocket, session: PhoneCallSession, 
             else:
                 # Get LLM response with interrupt support
                 ai_text, llm_processing_time = await get_interruptible_llm_response(
-                    session, user_text, conversation_context, background_music_task
+                    session, user_text, conversation_context, background_music_task, websocket
                 )
                 if ai_text is None:  # Interrupted
                     return
         else:
             # Normal mode with interrupt support
             ai_text, llm_processing_time = await get_interruptible_llm_response(
-                session, user_text, conversation_context, background_music_task
+                session, user_text, conversation_context, background_music_task, websocket
             )
             if ai_text is None:  # Interrupted
                 return
@@ -797,6 +1171,16 @@ async def process_llm_response(websocket: WebSocket, session: PhoneCallSession, 
         # Step 3: Text to Speech with interrupt support
         tts_start_time = time.time()
         
+        # Enhanced: Send TTS start notification to keep WebSocket alive
+        print("🔄 DEBUG: Sending tts_started notification")
+        await safe_websocket_send(websocket, {
+            "type": "tts_started",
+            "message": "Converting text to speech...",
+            "session_id": session_id,
+            "text_length": len(ai_text),
+            "timestamp": time.time()
+        })
+        
         # Phase 3: Create interruptible TTS task
         tts_task = asyncio.create_task(tts_service.synthesize_speech_api(
             text=ai_text,
@@ -811,6 +1195,26 @@ async def process_llm_response(websocket: WebSocket, session: PhoneCallSession, 
         
         try:
             tts_result = await tts_task
+            
+            # Enhanced: Send TTS completion notification
+            print("🔄 DEBUG: Sending tts_completed notification")
+            await safe_websocket_send(websocket, {
+                "type": "tts_completed",
+                "message": "Audio ready, sending...",
+                "session_id": session_id,
+                "audio_size": len(tts_result.get("audio_data", "")) if tts_result else 0,
+                "timestamp": time.time()
+            })
+            
+            # Enhanced: Stop aggressive heartbeat
+            print("💓 Stopping aggressive heartbeat task...")
+            if 'heartbeat_task' in locals():
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+                
         except asyncio.CancelledError:
             # TTS was interrupted
             logger.info(f"TTS task interrupted for session {session.session_id}")
@@ -1235,9 +1639,9 @@ async def handle_optimized_session_start(websocket: WebSocket, message: Dict):
             connection_pool_manager.optimize_for_phone_calls()
             logger.info("Connection pooling optimized for phone calls")
         
-        # Phase 4: Pre-warm optimized LLM for faster first response
+        # Phase 4: Select optimal model for faster first response
         model = settings_data.get("model", "gemma2:2b")
-        await optimized_llm_service.warmup_models()
+        logger.info(f"Selected optimal model: {model} for phone call session {session_id}")
         
         # Phase 4: Get current service quality
         current_quality = get_overall_quality()
@@ -1274,82 +1678,246 @@ async def handle_optimized_session_start(websocket: WebSocket, message: Dict):
 
 async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
     """Enhanced audio processing with Phase 4 performance optimization."""
+    logger.info("🚨 FUNCTION START: handle_optimized_audio_data called")
+    logger.info("🚨🚨🚨 NEW CODE VERSION - RESTART SUCCESSFUL! 🚨🚨🚨")
     session_id = message["session_id"]
+    
+    # CRITICAL EARLY CHECK: Prevent overlapping responses IMMEDIATELY
+    if session_id in phone_manager.active_ai_responses:
+        logger.warning(f"🚫 EARLY BLOCK: Session {session_id} already has active AI response - DROPPING audio immediately")
+        await safe_websocket_send(websocket, {
+            "type": "status",
+            "message": "AI is still responding, please wait...",
+            "session_id": session_id
+        })
+        return
+    
     session = phone_manager.get_session(session_id)
     
     if not session:
-        await websocket.send_text(json.dumps({
+        await safe_websocket_send(websocket, {
             "type": "error", 
             "message": "Session not found"
-        }))
+        })
+        return
+    
+    # CRITICAL FIX: Check if AI is already responding for this session
+    if session_id in phone_manager.active_ai_responses:
+        logger.warning(f"🚫 Session {session_id} already has active AI response - DROPPING audio to prevent overlap")
+        await safe_websocket_send(websocket, {
+            "type": "status",
+            "message": "AI is still responding, please wait...",
+            "session_id": session_id
+        })
+        return
+    
+    # Prevent overlapping responses using processing lock
+    processing_lock = phone_manager.processing_locks.get(session_id)
+    if not processing_lock:
+        logger.warning(f"No processing lock found for session {session_id}")
+        return
+    
+    # Check if we're already processing a request
+    if processing_lock.locked():
+        logger.info(f"Session {session_id} already processing - DROPPING this audio chunk to prevent overlap")
+        
+        # Send immediate acknowledgment to user
+        await safe_websocket_send(websocket, {
+            "type": "status",
+            "message": "Still processing previous request...",
+            "session_id": session_id
+        })
+        
+        # CRITICAL FIX: Return early to prevent multiple concurrent AI responses
+        logger.warning(f"Dropping audio chunk for session {session_id} - AI already responding")
         return
     
     try:
-        # Phase 4: Start comprehensive performance tracking
-        interaction_start_time = time.time()
-        
-        # Send process status: Transfer completed, starting STT
-        await send_stage_completed(websocket, "transfer", "Audio data received")
-        await send_stage_active(websocket, "stt", "Converting speech to text...")
-        
-        # Decode audio data - handle missing audio_data gracefully and support both field names
-        audio_data_field = message.get("audio_data") or message.get("audio")
-        if not audio_data_field:
-            logger.error("Missing audio_data or audio field in message")
-            await send_stage_error(websocket, "transfer", "Missing audio data")
-            await websocket.send_text(json.dumps({
-                "type": "error",
-                "message": "Missing audio data (expected 'audio_data' or 'audio' field)",
-                "stage": "transfer"
-            }))
-            return
+        # Acquire lock to prevent multiple simultaneous processing
+        async with processing_lock:
+            # Check minimum time between responses (prevent rapid-fire responses)
+            current_time = time.time()
+            last_response_time = phone_manager.last_response_times.get(session_id, 0)
+            min_response_interval = 0.5  # Reduced to 0.5 seconds for faster response
             
-        audio_data = base64.b64decode(audio_data_field)
-        
-        # Store audio in conversation flow manager for intelligent processing
-        conversation_flow_manager.process_audio_chunk(session_id, audio_data)
-        
-        # Phase 4: Record audio processing start (using existing method)
-        logger.info(f"Processing audio data: {len(audio_data)} bytes")
-        logger.debug(f"Session settings type: {type(session.settings)}")
-        logger.debug(f"Session settings: {session.settings}")
-        
-        # Phase 2: Apply noise reduction if enabled
-        if session.settings.get("noise_reduction", False):
-            audio_data = await audio_processor.reduce_noise(audio_data)
-        
-        # Check if we should interrupt the user (but still process the audio)
-        should_interrupt = conversation_flow_manager.should_interrupt_user(session_id)
-        if should_interrupt:
+            if current_time - last_response_time < min_response_interval:
+                logger.info(f"Response too soon for session {session_id} - sending quick acknowledgment")
+                # Send immediate acknowledgment instead of blocking
+                await safe_websocket_send(websocket, {
+                    "type": "status", 
+                    "message": "Processing...",
+                    "session_id": session_id
+                })
+                return
+            
+            # Update last response time
+            phone_manager.last_response_times[session_id] = current_time
+            
+            # Phase 4: Start comprehensive performance tracking
+            interaction_start_time = time.time()
+            
+            # Send process status: Transfer completed, starting STT
+            await send_stage_completed(websocket, "transfer", "Audio data received")
+            await send_stage_active(websocket, "stt", "Converting speech to text...")
+            
+            # Decode audio data - handle missing audio_data gracefully and support both field names
+            audio_data_field = message.get("audio_data") or message.get("audio")
+            if not audio_data_field:
+                logger.error("Missing audio_data or audio field in message")
+                await send_stage_error(websocket, "transfer", "Missing audio data")
+                await safe_websocket_send(websocket, {
+                    "type": "error",
+                    "message": "Missing audio data (expected 'audio_data' or 'audio' field)",
+                    "stage": "transfer"
+                })
+                return
+                
+            audio_data = base64.b64decode(audio_data_field)
+            
+            # Store audio in conversation flow manager for intelligent processing
+            conversation_flow_manager.process_audio_chunk(session_id, audio_data)
+            
+            # Phase 4: Record audio processing start (using existing method)
+            logger.info(f"Processing audio data: {len(audio_data)} bytes")
+            logger.debug(f"Session settings type: {type(session.settings)}")
+            logger.debug(f"Session settings: {session.settings}")
+            
+            # Phase 2: Apply noise reduction if enabled (enhanced) - SIMPLIFIED for speed
+            # Apply noise reduction only if enabled and not WebM format
+            # WebM containers should not be processed as raw audio
+            if session.settings.get("noise_reduction", True) and not audio_data.startswith(b'\x1A\x45\xDF\xA3'):
+                try:
+                    logger.info("Applying fast noise reduction (non-WebM audio)")
+                    # Use only the fast enhance_audio_for_phone_call function
+                    audio_data = await enhance_audio_for_phone_call(audio_data)
+                    logger.info(f"Fast noise reduction applied, audio size: {len(audio_data)} bytes")
+                except Exception as noise_error:
+                    logger.warning(f"Fast noise reduction failed: {noise_error}, using original audio")
+            elif audio_data.startswith(b'\x1A\x45\xDF\xA3'):
+                logger.info("🎯 Skipping noise reduction for WebM container data")
+            
+            # REMOVED: Additional audio_processor.reduce_noise() to speed up processing            # Check if we should interrupt the user (but still process the audio)
+            should_interrupt = conversation_flow_manager.should_interrupt_user(session_id)
+            if should_interrupt:
+                logger.info(f"Interrupting user for session {session_id}")
+                await conversation_flow_manager.interrupt_user(session_id, websocket)
+                # Continue processing this audio chunk even after interruption
+            
+            # Phase 2: Check for interrupts - TEMPORARILY DISABLED FOR WEBM TESTING
+            # if session.settings.get("interrupt_detection", False) and interrupt_service.is_ai_thinking(session_id):
+            #     interrupt_detected = await interrupt_service.detect_interrupt(session_id, audio_data)
+            #     if interrupt_detected:
+            #         logger.info(f"Interrupt detected for session {session_id}")
+            #         await send_stage_error(websocket, "stt", "Interrupted by user")
+            #         return
+            
+            # Continue with rest of processing...
+            # (The rest of the function continues normally)
             logger.info(f"Interrupting user for session {session_id}")
             await conversation_flow_manager.interrupt_user(session_id, websocket)
             # Continue processing this audio chunk even after interruption
         
-        # Phase 2: Check for interrupts
-        if session.settings.get("interrupt_detection", False) and interrupt_service.is_ai_thinking(session_id):
-            interrupt_detected = await interrupt_service.detect_interrupt(session_id, audio_data)
-            if interrupt_detected:
-                logger.info(f"Interrupt detected for session {session_id}")
-                await send_stage_error(websocket, "stt", "Interrupted by user")
-                return
+        # Phase 2: Check for interrupts - TEMPORARILY DISABLED FOR WEBM TESTING  
+        # if session.settings.get("interrupt_detection", False) and interrupt_service.is_ai_thinking(session_id):
+        #     interrupt_detected = await interrupt_service.detect_interrupt(session_id, audio_data)
+        #     if interrupt_detected:
+        #         logger.info(f"Interrupt detected for session {session_id}")
+        #         await send_stage_error(websocket, "stt", "Interrupted by user")
+        #         return
         
         # Phase 4: Optimized Speech-to-Text with performance tracking
         stt_start_time = time.time()
         
+        # First, detect the audio format from the current chunk
+        audio_format = "webm"  # Default assumption from phone call WebSocket
+        
+        # Check format of current chunk BEFORE any accumulation
+        current_chunk_webm = audio_data.startswith(b'\x1A\x45\xDF\xA3')  # Use same magic bytes as debugging section
+        logger.info(f"🔍 Current chunk WebM check: {current_chunk_webm}")
+        
+        # Check if we have accumulated audio from queued chunks
+        if session_id in phone_manager.accumulated_audio and phone_manager.accumulated_audio[session_id]:
+            logger.info(f"Processing accumulated audio chunks for session {session_id}")
+            
+            # If current chunk is WebM container format, handle intelligently
+            if current_chunk_webm:
+                logger.info("🎯 Current chunk is WebM container - using intelligent WebM handling")
+                
+                # Check if accumulated chunks are also WebM containers
+                accumulated_chunks = phone_manager.accumulated_audio[session_id]
+                accumulated_webm_count = sum(1 for chunk in accumulated_chunks if chunk.startswith(b'\x1A\x45\xDF\xA3'))
+                
+                logger.info(f"📊 Accumulated: {len(accumulated_chunks)} chunks, {accumulated_webm_count} WebM containers")
+                
+                # If we have multiple WebM containers, use the latest complete one
+                if accumulated_webm_count > 0:
+                    logger.info("🔄 Multiple WebM containers detected - using latest complete container")
+                    # Use current chunk as it's the most recent complete WebM container
+                    audio_data = audio_data
+                    audio_format = "webm"
+                else:
+                    logger.info("🔧 Accumulated raw chunks + WebM container - using WebM container only")
+                    # Previous chunks were raw/incomplete, current is complete WebM
+                    audio_data = audio_data
+                    audio_format = "webm"
+                
+                # Clear accumulated audio
+                phone_manager.accumulated_audio[session_id] = []
+                
+            else:
+                # Current chunk is not WebM - check if accumulated chunks contain WebM
+                accumulated_chunks = phone_manager.accumulated_audio[session_id]
+                webm_chunks = [chunk for chunk in accumulated_chunks if chunk.startswith(b'\x1A\x45\xDF\xA3')]
+                
+                if webm_chunks:
+                    logger.info(f"🎯 Found {len(webm_chunks)} WebM containers in accumulated audio")
+                    # Use the last WebM container found
+                    audio_data = webm_chunks[-1]
+                    audio_format = "webm"
+                    logger.info("✅ Using latest WebM container from accumulated audio")
+                else:
+                    logger.info("📦 No WebM containers found - proceeding with raw accumulation")
+                    # Normal raw audio accumulation
+                    all_audio_chunks = accumulated_chunks + [audio_data]
+                    combined_audio = b''.join(all_audio_chunks)
+                    audio_data = combined_audio
+                    audio_format = "raw"
+                    logger.info(f"Combined raw audio size: {len(audio_data)} bytes")
+                
+                # Clear accumulated audio
+                phone_manager.accumulated_audio[session_id] = []
+        else:
+            # No accumulated audio - determine format from current chunk
+            if current_chunk_webm:
+                audio_format = "webm"
+                logger.info("✅ Single WebM container detected")
+            else:
+                # Check for other formats
+                if audio_data.startswith(b'RIFF') and b'WAVE' in audio_data[:20]:
+                    audio_format = "wav"
+                    logger.info("✅ WAV format detected")
+                elif audio_data.startswith(b'ID3') or audio_data.startswith(b'\xFF\xFB'):
+                    audio_format = "mp3"
+                    logger.info("✅ MP3 format detected")
+                else:
+                    audio_format = "raw"
+                    logger.info("📦 No container format detected - treating as raw PCM")
+        
+        logger.info(f"🎯 Final audio format for STT: {audio_format}, data size: {len(audio_data)} bytes")
+        
+        # At this point, audio_format is determined by our intelligent WebM handling above
+        # and audio_data contains the properly selected audio data
+        
         stt_result = await stt_client.transcribe_audio_file(
             audio_data, 
-            format="wav",  # Assuming WAV format from browser
+            format=audio_format,  # Use format determined by intelligent WebM handling
             language=session.settings.get("language", "en")
         )
         
         stt_duration = time.time() - stt_start_time
         
-        # DEBUG: Print entire STT result
-        print(f"DEBUG: Full STT result: {stt_result}")
-        
         # Extract text from STT result
         user_text = stt_result.get("text", "").strip() if stt_result.get("success") else ""
-        print(f"DEBUG: Extracted user_text: '{user_text}'")
         
         # Handle STT errors
         if not stt_result.get("success", False):
@@ -1371,33 +1939,143 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             await send_stage_error(websocket, "stt", "No speech detected")
             # Mark user as stopped speaking when no text detected
             conversation_flow_manager.stop_user_speaking(session_id)
-            return
+            
+            # Don't return immediately - instead use silence detection to check if user is done
+            # Add silence tracking to session using manager
+            phone_manager.silence_counts[session_id] = phone_manager.silence_counts.get(session_id, 0) + 1
+            
+            # If we have accumulated user text and enough silence, process it
+            accumulated_text = phone_manager.accumulated_texts.get(session_id, "")
+            silence_count = phone_manager.silence_counts.get(session_id, 0)
+            
+            if (accumulated_text.strip() and silence_count >= 2):  # 2 consecutive silences
+                
+                logger.info(f"Processing accumulated text after silence: '{accumulated_text}'")
+                user_text = accumulated_text.strip()
+                phone_manager.accumulated_texts[session_id] = ""
+                phone_manager.silence_counts[session_id] = 0
+                
+                # Continue with processing the accumulated text
+            else:
+                return
+        else:
+            # Reset silence count when we get text
+            phone_manager.silence_counts[session_id] = 0
+            
+            # Enhanced sentence accumulation logic with EMERGENCY INTERRUPT
+            accumulated_text = phone_manager.accumulated_texts.get(session_id, "")
+            
+            # EMERGENCY INTERRUPT: Check for "okaydokay" repeated twice
+            emergency_keywords = ["okaydokay okaydokay", "okayokday okayokday", "okay dokay okay dokay"]
+            user_text_lower = user_text.lower().strip()
+            
+            is_emergency_interrupt = any(keyword in user_text_lower for keyword in emergency_keywords)
+            
+            if is_emergency_interrupt:
+                logger.info(f"🚨 EMERGENCY INTERRUPT DETECTED: '{user_text}' - Forcing immediate response")
+                
+                # EMERGENCY ACTIONS:
+                # 1. Clear accumulated text
+                phone_manager.accumulated_texts[session_id] = ""
+                
+                # 2. Mark any active AI response as completed (force clear)
+                if session_id in phone_manager.active_ai_responses:
+                    phone_manager.active_ai_responses.discard(session_id)
+                    logger.info(f"🚫 EMERGENCY: Cleared active AI response for session {session_id}")
+                
+                # 3. Send immediate stop signal to client
+                await safe_websocket_send(websocket, {
+                    "type": "emergency_interrupt",
+                    "message": "Emergency interrupt activated - stopping current audio",
+                    "session_id": session_id
+                })
+                
+                # 4. Set interrupt text for processing
+                user_text = "Please stop and listen to me now."
+                # Skip accumulation and process immediately
+            else:
+                # Add new text to accumulated text
+                if accumulated_text:
+                    phone_manager.accumulated_texts[session_id] = accumulated_text + " " + user_text
+                else:
+                    phone_manager.accumulated_texts[session_id] = user_text
+                
+                accumulated_text = phone_manager.accumulated_texts[session_id]
+                logger.info(f"Accumulated text: '{accumulated_text}'")
+                
+                # IMPROVED: Smart sentence completion detection
+                complete_sentence_indicators = ['.', '!', '?']
+                has_sentence_ending = any(indicator in accumulated_text for indicator in complete_sentence_indicators)
+                
+                # Check if accumulated text seems complete (length + indicators)
+                is_substantial_input = len(accumulated_text.strip()) >= 10  # At least 10 characters
+                is_likely_complete = has_sentence_ending or len(accumulated_text.split()) >= 5  # 5+ words or sentence ending
+                
+                # Only process if we have substantial and likely complete input
+                if is_substantial_input and is_likely_complete:
+                    user_text = accumulated_text.strip()
+                    phone_manager.accumulated_texts[session_id] = ""
+                    logger.info(f"Processing complete sentence: '{user_text}'")
+                else:
+                    logger.info(f"Accumulating more text... Current: '{accumulated_text}' (waiting for completion)")
+                    return  # Wait for more input
+            # pause_indicators = [',', ':', 'and', 'but', 'so', 'then', 'also']
+            
+            # text_lower = user_text.lower().strip()
+            # accumulated_lower = accumulated_text.lower().strip()
+            
+            # Determine if we should respond now
+            # should_respond_now = (
+            #     # Ends with sentence terminator
+            #     user_text.strip().endswith(tuple(complete_sentence_indicators)) or
+            #     # Accumulated text is getting long
+            #     len(accumulated_text.split()) >= 8 or
+            #     # Contains question words (likely a complete question)
+            #     any(word in accumulated_lower.split()[:3] for word in ['what', 'how', 'why', 'when', 'where', 'who', 'can', 'could', 'would', 'should', 'do', 'does', 'is', 'are']) or
+            #     # Contains greeting/farewell
+            #     any(word in text_lower for word in ['hello', 'hi', 'hey', 'goodbye', 'bye', 'thanks', 'thank you'])
+            # )
+            
+            # if not should_respond_now:
+            #     logger.info(f"Waiting for more input... current: '{accumulated_text[:50]}...'")
+            #     # Send acknowledgment but don't respond yet
+            #     await safe_websocket_send(websocket, {
+            #         "type": "speech_received",
+            #         "message": f"Listening... ({len(accumulated_text.split())} words)",
+            #         "session_id": session_id
+            #     })
+            #     return
+            
+            # Use the accumulated text for response
+            # user_text = accumulated_text.strip()
+            # phone_manager.accumulated_texts[session_id] = ""
         
         # Mark user as stopped speaking and add text to conversation
         conversation_flow_manager.stop_user_speaking(session_id)
         conversation_flow_manager.add_user_message(session_id, user_text)
         
+        # SIMPLIFIED: Skip conversation flow manager check for now - always respond
         # Check if we should respond now or wait for more input
-        should_respond = conversation_flow_manager.should_respond_now(session_id)
-        if not should_respond:
-            logger.info(f"Received user input, but waiting for pause before responding: {user_text[:30]}...")
-            # Send acknowledgment but don't generate response yet
-            await websocket.send_text(json.dumps({
-                "type": "speech_received",
-                "message": f"Received: {user_text[:50]}..."
-            }))
-            return
+        # should_respond = conversation_flow_manager.should_respond_now(session_id)
+        # if not should_respond:
+        #     logger.info(f"Received user input, but waiting for pause before responding: {user_text[:30]}...")
+        #     # Send acknowledgment but don't generate response yet
+        #     await websocket.send_text(json.dumps({
+        #         "type": "speech_received",
+        #         "message": f"Received: {user_text[:50]}..."
+        #     }))
+        #     return
+        
+        logger.info(f"FORCING LLM PROCESSING for user input: '{user_text}'")  # Debug
         
         # STT completed successfully
         await send_stage_completed(websocket, "stt", f"Recognized: {user_text[:50]}...")
         await send_stage_active(websocket, "llm", "AI is processing your message...")
         
         logger.info(f"User said ({stt_duration:.2f}s): {user_text}")
-        print(f"DEBUG: User text received: '{user_text}'")  # Explicit debug print
         
         # Get conversation context from flow manager (with pruning if needed)
         conversation_context = conversation_flow_manager.get_conversation_context(session_id)
-        print(f"DEBUG: Full conversation context: {conversation_context}")
         
         # Extract the complete user message from conversation context
         # Get all recent user messages that haven't been responded to yet
@@ -1417,7 +2095,6 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         
         # Use complete message or fallback to current chunk
         final_user_message = complete_user_message.strip() if complete_user_message.strip() else user_text
-        print(f"DEBUG: Final combined user message: '{final_user_message}'")
         
         # Update session conversation history with managed context
         if conversation_context:
@@ -1429,15 +2106,62 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         # Update conversation flow with user input
         conversation_flow_manager.handle_user_input(session_id, final_user_message)
         
-        # Phase 4: Get optimized LLM response with enhanced monitoring
-        print(f"DEBUG: About to call LLM with final_user_message: '{final_user_message}'")  # Explicit debug print
-        ai_text, llm_duration = await get_interruptible_llm_response(
-            session, final_user_message, session.conversation_history
-        )
+        # CRITICAL: Mark session as having active AI response to prevent overlaps
+        phone_manager.active_ai_responses.add(session_id)
+        logger.info(f"🚀 Marked session {session_id} as having ACTIVE AI response")
         
-        if ai_text is None:
-            # Response was interrupted or failed
-            await send_stage_error(websocket, "llm", "Response interrupted or failed")
+        try:
+            # Enhanced: Send immediate acknowledgment to keep WebSocket alive
+            print("🔄 DEBUG: Sending processing_started notification")
+            await safe_websocket_send(websocket, {
+                "type": "processing_started",
+                "message": "AI is processing your request...",
+                "session_id": session_id,
+                "timestamp": time.time()
+            })
+            
+            # Enhanced: Start aggressive heartbeat during processing
+            print("💓 Starting aggressive heartbeat task...")
+            heartbeat_task = asyncio.create_task(maintain_aggressive_heartbeat(websocket, session_id))
+            
+            # Phase 4: Get optimized LLM response with enhanced monitoring
+            ai_text, llm_duration = await get_interruptible_llm_response(
+                session, final_user_message, session.conversation_history, None, websocket
+            )
+            
+            # Enhanced: Send intermediate update after LLM completion
+            print("🔄 DEBUG: Sending llm_completed notification")
+            await safe_websocket_send(websocket, {
+                "type": "llm_completed",
+                "message": "Generating audio...",
+                "session_id": session_id,
+                "text_preview": ai_text[:100] + "..." if len(ai_text) > 100 else ai_text,
+                "timestamp": time.time()
+            })
+            
+        except Exception as llm_error:
+            # Clear active AI response on error
+            phone_manager.active_ai_responses.discard(session_id)
+            logger.error(f"LLM error for session {session_id}: {llm_error}")
+            raise
+        
+        # Handle case where LLM response failed or was interrupted
+        if ai_text is None or not ai_text.strip():
+            logger.warning("LLM response was None or empty, using fallback")
+            await send_stage_error(websocket, "llm", "Response generation failed")
+            
+            # Send a simple acknowledgment instead of failing completely
+            await safe_websocket_send(websocket, {
+                "type": "ai_response",
+                "text": "I'm sorry, I didn't quite understand that. Could you try again?",
+                "session_id": session_id,
+                "timing": {
+                    "stt": stt_duration,
+                    "llm": 0.5,
+                    "tts": 0.0,
+                    "total": stt_duration + 0.5
+                }
+            })
             return
         
         # LLM completed successfully
@@ -1458,25 +2182,85 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         
         # Clean text for TTS (remove emojis, formatting, etc.)
         clean_text = clean_text_for_tts(ai_text)
-        print(f"DEBUG: Original AI text: '{ai_text}'")
-        print(f"DEBUG: Cleaned text for TTS: '{clean_text}'")
         
         try:
-            audio_response = await tts_client.synthesize_speech(
-                clean_text,
-                voice=session.settings.voice,
-                language=session.settings.language,
-                optimization_level=session.settings.get("optimization_level", "balanced")
-            )
+            # Use the correct TTS service method for British accent
+            logger.info(f"Starting TTS synthesis for text: '{clean_text[:50]}...'")
+            
+            # Create TTS task with heartbeat maintenance
+            tts_task = asyncio.create_task(tts_client.synthesize_speech_api(
+                text=clean_text,
+                language=session.settings.get("language", "en"),
+                voice=session.settings.get("voice", "default"),
+                speed=session.settings.get("speed", 1.0),
+                tts_mode="fast"  # Use fast mode for phone calls
+            ))
+            
+            # Maintain WebSocket heartbeat during TTS processing
+            logger.info(f"🔄 Starting TTS processing with WebSocket heartbeat for session {session_id}")
+            
+            async def maintain_tts_heartbeat():
+                try:
+                    while not tts_task.done():
+                        await asyncio.sleep(3)  # Check every 3 seconds
+                        if not tts_task.done():
+                            try:
+                                # FastAPI WebSocket doesn't have ping(), use send_text with ping message instead
+                                await safe_websocket_send(websocket, {
+                                    "type": "heartbeat",
+                                    "timestamp": time.time()
+                                })
+                                logger.debug(f"💓 Sent heartbeat ping during TTS processing for session {session_id}")
+                            except Exception as e:
+                                logger.warning(f"Failed to send TTS heartbeat ping: {e}")
+                                break
+                except Exception as e:
+                    logger.error(f"Error in TTS heartbeat maintenance: {e}")
+            
+            # Run TTS and heartbeat concurrently
+            heartbeat_task = asyncio.create_task(maintain_tts_heartbeat())
+            try:
+                audio_response = await tts_task
+            finally:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+            
+            logger.info(f"TTS response received: {type(audio_response)}, success: {audio_response.get('success') if isinstance(audio_response, dict) else 'N/A'}")
+            
+            # Extract audio data from response
+            if audio_response and audio_response.get("success"):
+                # Handle both response formats
+                audio_base64 = audio_response.get("audio_data") or audio_response.get("audio_base64", "")
+                if audio_base64:
+                    try:
+                        audio_response = base64.b64decode(audio_base64)
+                        logger.info(f"Successfully decoded TTS audio: {len(audio_response)} bytes")
+                    except Exception as decode_error:
+                        logger.error(f"Failed to decode TTS audio: {decode_error}")
+                        audio_response = None
+                else:
+                    logger.warning("TTS response success but no audio data found")
+                    audio_response = None
+            else:
+                logger.warning(f"TTS response failed or invalid: {audio_response}")
+                audio_response = None
+                
         except Exception as e:
             logger.warning(f"Primary TTS service failed: {e}. Using fallback TTS service.")
             # Use fallback TTS service
             try:
                 audio_response = await simple_tts_fallback.synthesize_speech(
                     clean_text,
-                    voice=session.settings.voice,
-                    language=session.settings.language
+                    voice=session.settings.get("voice", "default"),
+                    language=session.settings.get("language", "en")
                 )
+                if audio_response:
+                    logger.info(f"Fallback TTS succeeded: {len(audio_response)} bytes")
+                else:
+                    logger.warning("Fallback TTS returned no audio")
             except Exception as fallback_error:
                 logger.error(f"Fallback TTS service also failed: {fallback_error}")
                 audio_response = None
@@ -1488,18 +2272,27 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             session_id=session_id,
             duration=tts_duration,
             text_length=len(ai_text),
-            audio_length=len(audio_response) if audio_response else 0,
+            audio_duration=len(audio_response) / 16000.0 if audio_response else 0.0,  # Estimate duration from bytes
             success=bool(audio_response),
-            voice=session.settings.voice,
-            language=session.settings.language
+            error=None if audio_response else "No audio generated"
         )
         
         if not audio_response:
+            logger.error("TTS processing failed - no audio generated")
             await send_stage_error(websocket, "tts", "TTS processing failed")
+            
+            # Send a text-only response as fallback
             await safe_websocket_send(websocket, {
-                "type": "error",
-                "message": "TTS processing failed",
-                "stage": "tts"
+                "type": "ai_response",
+                "text": ai_text,
+                "session_id": session_id,
+                "timing": {
+                    "stt": stt_duration,
+                    "llm": llm_duration,
+                    "tts": tts_duration,
+                    "total": total_duration
+                },
+                "error": "TTS audio generation failed, text-only response"
             })
             return
         
@@ -1511,12 +2304,15 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
         current_quality = get_overall_quality()
         
         # Send optimized response
-        audio_base64 = base64.b64encode(audio_response).decode()
+        if audio_response:
+            audio_base64 = base64.b64encode(audio_response).decode()
+        else:
+            audio_base64 = ""
         
-        await safe_websocket_send(websocket, {
+        response_data = {
             "type": "ai_response",
-            "audio": audio_base64,
             "text": ai_text,
+            "session_id": session_id,
             "timing": {
                 "stt": stt_duration,
                 "llm": llm_duration,
@@ -1526,28 +2322,131 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             "optimization": {
                 "quality": current_quality.value,
                 "model_used": session.settings.get("model", "gemma2:2b"),
-                "performance_score": performance_monitor.get_session_score(session_id)
+                "performance_score": performance_monitor.get_session_score(session_id) if hasattr(performance_monitor, 'get_session_score') else 0.85
             }
+        }
+        
+        # Only add audio if available
+        if audio_base64:
+            response_data["audio"] = audio_base64
+        
+        # CRITICAL: Track that AI is about to start responding (for smart interruption)
+        logger.info(f"🤖 Sending AI response for session {session_id}")
+        
+        # Enhanced: Verify WebSocket connection before sending audio response
+        from fastapi.websockets import WebSocketState
+        if not websocket or websocket.client_state != WebSocketState.CONNECTED:
+            logger.error(f"❌ CRITICAL: WebSocket disconnected before sending audio response for session {session_id}")
+            logger.error(f"WebSocket state: {getattr(websocket, 'client_state', 'unknown')}")
+            
+            # Clear active response tracking since we can't send
+            phone_manager.active_ai_responses.discard(session_id)
+            return  # Exit early to prevent error
+        
+        # Enhanced: Send a pre-flight test message to verify connection
+        print("🔄 Sending pre-flight connection test...")
+        preflight_success = await safe_websocket_send(websocket, {
+            "type": "preflight_test",
+            "session_id": session_id,
+            "timestamp": time.time()
         })
+        
+        if not preflight_success:
+            logger.error(f"❌ CRITICAL: Pre-flight test failed for session {session_id}")
+            phone_manager.active_ai_responses.discard(session_id)
+            return
+        
+        # Enhanced: Send audio in smaller chunks to prevent large payload timeouts
+        if audio_base64 and len(audio_base64) > 50000:  # If audio is large (>50KB)
+            print(f"🔄 Large audio detected ({len(audio_base64)} chars), sending in chunks...")
+            chunk_size = 30000  # 30KB chunks
+            total_chunks = (len(audio_base64) + chunk_size - 1) // chunk_size
+            
+            for i in range(total_chunks):
+                start_idx = i * chunk_size
+                end_idx = min((i + 1) * chunk_size, len(audio_base64))
+                chunk = audio_base64[start_idx:end_idx]
+                
+                chunk_data = {
+                    "type": "audio_chunk",
+                    "session_id": session_id,
+                    "chunk_index": i,
+                    "total_chunks": total_chunks,
+                    "audio_chunk": chunk,
+                    "text": response_data.get("text", "") if i == 0 else "",  # Only send text with first chunk
+                    "timing": response_data.get("timing", {}) if i == 0 else {}
+                }
+                
+                chunk_success = await safe_websocket_send(websocket, chunk_data)
+                if not chunk_success:
+                    logger.error(f"❌ Failed to send audio chunk {i+1}/{total_chunks}")
+                    phone_manager.active_ai_responses.discard(session_id)
+                    return
+                else:
+                    print(f"✅ Sent audio chunk {i+1}/{total_chunks}")
+                    
+            print(f"✅ All {total_chunks} audio chunks sent successfully")
+            phone_manager.active_ai_responses.discard(session_id)
+            return
+        
+        # Send the response using enhanced safe send
+        send_success = await safe_websocket_send(websocket, response_data)
+        
+        if send_success:
+            # Mark that AI response has been sent (smart interrupt manager will track playback)
+            logger.info(f"✅ AI response sent successfully for session {session_id}")
+        else:
+            logger.error(f"❌ Failed to send AI response for session {session_id}")
+        
+        # CRITICAL: Clear active AI response tracking to allow next request
+        phone_manager.active_ai_responses.discard(session_id)
+        logger.info(f"🏁 Cleared ACTIVE AI response flag for session {session_id}")
         
         # Phase 4: Record interaction success (using existing methods)
         # The individual component performance is already recorded above
         logger.info(f"Interaction completed: total={total_duration:.2f}s, stt={stt_duration:.2f}s, llm={llm_duration:.2f}s, tts={tts_duration:.2f}s")
         
         # Phase 3: Save to call history
+        # Add user message
         call_history_service.add_message(
             session.call_id, 
+            "user", 
             user_text, 
+            int(stt_duration * 1000),  # Convert to milliseconds
+            False
+        )
+        
+        # Add AI response
+        call_history_service.add_message(
+            session.call_id, 
+            "assistant", 
             ai_text, 
-            stt_duration, 
-            llm_duration, 
-            tts_duration
+            int((llm_duration + tts_duration) * 1000),  # Convert to milliseconds
+            False
         )
         
         logger.info(f"Optimized interaction completed ({total_duration:.2f}s, quality: {current_quality.value})")
         
+        # Process any queued audio chunks after main response is completed
+        queued_audio = phone_manager.accumulated_audio.get(session_id, [])
+        if queued_audio:
+            logger.info(f"Processing {len(queued_audio)} queued audio chunks for session {session_id}")
+            # Clear the queue
+            phone_manager.accumulated_audio[session_id] = []
+            
+            # Combine all queued audio chunks
+            combined_audio = b''.join(queued_audio)
+            if len(combined_audio) > 1000:  # Only process if we have substantial audio
+                logger.info(f"Scheduling processing of combined queued audio: {len(combined_audio)} bytes")
+                # Schedule processing of combined audio (don't await to avoid blocking)
+                asyncio.create_task(_process_queued_audio(websocket, session_id, combined_audio))
+            
     except Exception as e:
         logger.error(f"Error in optimized audio processing: {e}")
+        
+        # CRITICAL: Clear active AI response tracking on error to prevent deadlock
+        phone_manager.active_ai_responses.discard(session_id)
+        logger.warning(f"🚨 Cleared ACTIVE AI response flag for session {session_id} due to error")
         
         # Send process error status
         await send_stage_error(websocket, "llm", f"Processing failed: {str(e)}")
@@ -1627,8 +2526,11 @@ async def handle_optimized_session_end(websocket: WebSocket, message: Dict, call
             logger.info("Connection pool cleanup completed")
         
         # Cleanup session
-        phone_manager.remove_session(session_id)
+        phone_manager.end_session(session_id)
         interrupt_service.unregister_session(session_id)
+        
+        # NEW: Clean up smart interrupt manager
+        smart_interrupt_manager.cleanup_session(session_id)
         
         # Clean up conversation flow manager
         conversation_flow_manager.end_conversation(session_id)

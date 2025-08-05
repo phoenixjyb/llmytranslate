@@ -9,7 +9,9 @@ from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import time
 import os
+import asyncio
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 from .core.config import get_settings
 from .core.network import NetworkManager
@@ -27,6 +29,50 @@ class MockLogger:
 logger = MockLogger()
 
 
+async def preload_ollama_model():
+    """Preload gemma2:2b model to eliminate startup delays."""
+    try:
+        import httpx
+        
+        print("🚀 Preloading gemma2:2b model...")
+        
+        # Simple test request to warm up the model
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "gemma2:2b",
+                    "prompt": "Hello",
+                    "stream": False
+                }
+            )
+            
+            if response.status_code == 200:
+                print("✅ gemma2:2b model preloaded successfully")
+            else:
+                print(f"⚠️ Model preload response: {response.status_code}")
+                
+    except Exception as e:
+        print(f"⚠️ Failed to preload model (will load on first request): {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan events."""
+    # Startup
+    print("🚀 Starting LLM Translation Service...")
+    
+    # Preload the model
+    await preload_ollama_model()
+    
+    print("✅ Service startup complete")
+    
+    yield
+    
+    # Shutdown
+    print("🛑 Shutting down LLM Translation Service...")
+
+
 def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
     
@@ -41,6 +87,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         docs_url=None,  # Disable default docs, we'll handle it ourselves
         redoc_url=None,  # Disable default redoc, we'll handle it ourselves
+        lifespan=lifespan  # Add lifespan management
     )
     
     # Add CORS middleware

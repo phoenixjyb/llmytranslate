@@ -133,6 +133,10 @@ from ...storage.conversation_manager import ConversationManager
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/phone", tags=["phone-call"])
 
+# CRITICAL DEBUG: This is the MOBILE version - should NOT appear in main service!
+logger.info("🚨🚨🚨 MOBILE PHONE_CALL.PY MODULE LOADED - WRONG FILE! 🚨🚨🚨")
+logger.info("❌ ERROR: Main service is importing mobile version instead of main version!")
+
 # Phone call session models
 class PhoneCallSession(BaseModel):
     session_id: str

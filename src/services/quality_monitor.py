@@ -68,8 +68,8 @@ class QualityMonitor:
                 "emergency": "simple_speech_detection"
             },
             "llm": {
-                "primary": "phi3-mini",
-                "fallbacks": ["gemma2:2b", "llama3.2:1b", "gemma2:2b"],
+                "primary": "gemma2:2b",
+                "fallbacks": ["gemma2:2b"],
                 "emergency": "simple_responses"
             },
             "tts": {

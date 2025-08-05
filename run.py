@@ -22,7 +22,11 @@ def main():
         port=settings.api.port,
         workers=settings.api.workers,
         reload=settings.debug,
-        log_level=settings.logging.log_level.lower()
+        log_level=settings.logging.log_level.lower(),
+        # Enhanced WebSocket configuration for long audio processing
+        ws_ping_interval=10.0,  # Send ping every 10 seconds
+        ws_ping_timeout=30.0,   # Wait 30 seconds for pong response
+        timeout_keep_alive=60   # Keep connection alive for 60 seconds
     )
 
 if __name__ == "__main__":

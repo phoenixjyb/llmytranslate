@@ -58,11 +58,9 @@ class OptimizedTranslationService:
             "model_usage": {}
         }
         
-        # Model preferences (fastest to slowest)
+        # Use only gemma2:2b to avoid model switching overhead
         self.model_preferences = [
-            "gemma3:latest",      # Fastest, good quality
-            "llama3.1:8b",        # Slower but higher quality
-            "llava:latest"        # Fallback
+            "gemma2:2b",         # Single model for consistency
         ]
         
         self._initialized = False

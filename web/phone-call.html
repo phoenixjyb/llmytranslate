@@ -729,6 +729,10 @@
                 <div class="status-text" id="statusText">Ready to dial</div>
                 <div class="status-details" id="statusDetails">Click the dial button to start your call</div>
                 <div class="call-timer" id="callTimer">00:00</div>
+                <!-- 🌐 WEBSOCKET STATUS -->
+                <div class="websocket-status" id="websocketStatus" style="margin-top: 5px; font-size: 0.8rem;">
+                    <span id="wsIndicator" style="color: #666;">🔴 Not connected</span>
+                </div>
             </div>
 
             <!-- Process Status Indicator -->
@@ -812,6 +816,11 @@
                 <button class="control-button hangup-button" id="hangupButton" title="End Call" disabled>
                     📵
                 </button>
+                <!-- 🚨 EMERGENCY: Noise Gate Toggle -->
+                <button class="control-button noise-gate-button" id="noiseGateButton" title="Toggle Noise Gate (Currently: BYPASSED)" 
+                        style="background: #dc3545; color: white;">
+                    🔇
+                </button>
             </div>
         </div>
 
@@ -829,10 +838,12 @@
             <div class="setting-group">
                 <label class="setting-label">AI Model</label>
                 <select class="setting-input" id="modelSelect">
-                    <option value="gemma2:2b">Gemma 2 2B (Fastest)</option>
-                    <option value="gemma3:latest">Gemma 3 (Balanced)</option>
-                    <option value="llama3.1:8b">Llama 3.1 8B (Quality)</option>
-                    <option value="phi3.5:latest">Phi 3.5 (Advanced)</option>
+                    <option value="gemma2:2b" selected>Gemma2 2B (Fast, Recommended)</option>
+                    <option value="llama3.2:1b">Llama 3.2 1B (Fast)</option>
+                    <option value="gemma2:2b">Gemma 2 2B (Balanced)</option>
+                    <option value="llama3.1:8b">Llama 3.1 8B (High Quality)</option>
+                    <option value="gemma3:latest">Gemma 3 (Advanced)</option>
+                    <option value="llava:latest">LLaVA (Vision Capable)</option>
                 </select>
             </div>
 
@@ -887,6 +898,9 @@
                 this.callState = 'idle'; // idle, dialing, connected, ended
                 this.callTimer = null;
                 this.heartbeatInterval = null;  // Add heartbeat mechanism
+                this.connectionMonitor = null; // Add connection monitoring
+                this.reconnectionAttempts = 0; // Track reconnection attempts
+                this.maxReconnectionAttempts = 5; // Maximum reconnection attempts
                 this.callStartTime = null;
                 this.currentSessionId = null;
                 this.websocket = null;
@@ -894,6 +908,71 @@
                 this.audioChunks = [];
                 this.currentAudio = null; // Track current AI audio for interrupts
                 this.backgroundAudio = null; // Track background music
+                this.wasRecentlySpeaking = false; // Track recent user speaking for smart interruption
+                this.lastEmergencyTime = 0; // Track emergency interrupt timing to prevent spam
+                this.activeAudioElements = new Set(); // Track all active audio elements
+                this.lastAudioStartTime = 0; // Track when last audio started
+                this.audioOverlapDetected = false; // Track if overlap is detected
+                
+                // 🎯 ENHANCED AUDIO BUFFERING for continuous speech
+                this.audioBuffer = []; // Buffer for accumulating audio chunks
+                this.lastSpeechTime = 0; // Track when user last spoke
+                this.speechThreshold = 2000; // 2KB minimum for speech (was 1000)
+                this.silenceTimeout = 3000; // 3 seconds of silence before sending (was immediate)
+                // 🔊 NOISE GATE & VOICE ACTIVITY DETECTION
+                this.noiseGate = {
+                    enabled: false, // 🚨 EMERGENCY: Disable by default for immediate usability
+                    volumeThreshold: 5, // Very low threshold - almost always allow
+                    silenceThreshold: 500, // ms of silence before stopping recording
+                    speechThreshold: 50, // Very fast speech detection
+                    lastSpeechTime: 0,
+                    lastSilenceTime: 0,
+                    isRecordingValid: true, // 🚨 EMERGENCY: Always allow recording initially
+                    backgroundNoiseLevel: 0,
+                    calibrationSamples: [],
+                    calibrated: true, // 🚨 EMERGENCY: Skip calibration
+                    // 🎯 EMERGENCY: Manual override controls
+                    manualOverride: true, // 🚨 EMERGENCY: Always override
+                    adaptiveMode: false, // 🚨 EMERGENCY: Disable adaptive mode
+                    bypassMode: true // 🚨 EMERGENCY: Complete bypass
+                };
+
+                // 🔍 TIMING ENHANCEMENT: Add queue and network delays
+                this.timingEnhancements = {
+                    queueTime: 0,
+                    networkLatency: 0,
+                    serverQueueDepth: 0,
+                    connectionQuality: 'good'
+                };
+
+                // 🚨 WEBSOCKET RECONNECTION: Auto-reconnect for stable audio
+                this.websocketConfig = {
+                    maxReconnectAttempts: 5,
+                    reconnectAttempts: 0,
+                    reconnectDelay: 1000,
+                    isReconnecting: false,
+                    lastPingTime: 0,
+                    pingInterval: null
+                };
+
+                this.maxBufferTime = 8000; // 8 seconds max buffer before forced send
+                this.bufferStartTime = 0; // When current buffer started
+                
+                // 🔍 PERFORMANCE PROFILER - Track all timing data
+                this.performanceProfiler = {
+                    sessionStart: 0,
+                    stages: {},
+                    currentStage: null,
+                    totalTimes: {
+                        audioCapture: [],
+                        audioTransfer: [],
+                        sttProcessing: [],
+                        llmProcessing: [],
+                        ttsGeneration: [],
+                        audioPlayback: [],
+                        endToEnd: []
+                    }
+                };
                 
                 this.initializeElements();
                 this.setupEventListeners();
@@ -904,6 +983,7 @@
                 this.dialButton = document.getElementById('dialButton');
                 this.hangupButton = document.getElementById('hangupButton');
                 this.interruptButton = document.getElementById('interruptButton');
+                this.noiseGateButton = document.getElementById('noiseGateButton'); // 🚨 EMERGENCY CONTROL
                 this.statusText = document.getElementById('statusText');
                 this.statusDetails = document.getElementById('statusDetails');
                 this.callTimerDisplay = document.getElementById('callTimer');
@@ -915,6 +995,18 @@
                 // Process status elements
                 this.processStatus = document.getElementById('processStatus');
                 this.processDetails = document.getElementById('processDetails');
+                
+                // EMERGENCY INTERRUPT: Initialize keyword detection
+                this.emergencyKeywords = [
+                    'okay-dokay',           // 🎯 USER'S MAGIC WORD
+                    'okaydokay',           // Single word version
+                    'okay dokay',          // Spaced version
+                    'okaydokay okaydokay', // Original double version
+                    'okayokday okayokday', // Typo-tolerant variant
+                    'stop stop',           // Backup emergency
+                    'emergency interrupt'   // System emergency
+                ];
+                this.lastEmergencyTime = 0; // Prevent spam
                 this.agentResponseIndicator = document.getElementById('agentResponseIndicator');
                 
                 // Audio visualizer elements
@@ -1030,6 +1122,12 @@
             }
 
             completeSpeechRecognition(transcription = '') {
+                // EMERGENCY INTERRUPT: Check for emergency keywords first
+                if (transcription && this.checkEmergencyInterrupt(transcription)) {
+                    console.log('🚨 Emergency interrupt detected in transcription, stopping processing');
+                    return; // Stop all further processing
+                }
+                
                 this.setStageStatus('stt', 'completed');
                 this.setStageStatus('transfer', 'active', 'Sending data to server...');
                 if (transcription) {
@@ -1138,8 +1236,23 @@
                     const average = sum / this.dataArray.length;
                     const volumePercent = Math.round((average / 255) * 100);
                     
-                    // Update volume indicator
-                    this.volumeIndicator.textContent = `${volumePercent}%`;
+                    // 🔊 VOICE ACTIVITY DETECTION: Process volume for noise gating
+                    this.processVoiceActivity(volumePercent);
+                    
+                    // Update volume indicator with noise gate status
+                    const gateStatus = this.noiseGate.bypassMode ? '🚨' : (this.noiseGate.isRecordingValid ? '🔊' : '🔇');
+                    this.volumeIndicator.textContent = `${gateStatus} ${volumePercent}%`;
+                    
+                    // Color code volume indicator based on noise gate
+                    if (this.noiseGate.bypassMode) {
+                        this.volumeIndicator.style.color = '#dc3545'; // Red for bypass mode
+                    } else if (this.noiseGate.isRecordingValid) {
+                        this.volumeIndicator.style.color = '#28a745'; // Green for valid speech
+                    } else if (volumePercent > this.noiseGate.volumeThreshold) {
+                        this.volumeIndicator.style.color = '#ffc107'; // Yellow for volume but below speech threshold
+                    } else {
+                        this.volumeIndicator.style.color = '#6c757d'; // Gray for silence/noise
+                    }
                     
                     // Update audio bars
                     const bars = this.audioBars.children;
@@ -1190,6 +1303,63 @@
                 this.updateMicrophoneStatus('inactive', 'Microphone inactive');
             }
 
+            // 🔊 VOICE ACTIVITY DETECTION: Intelligent noise gating and speech detection
+            processVoiceActivity(volumePercent) {
+                const now = Date.now();
+                
+                // 📊 CALIBRATION: Learn background noise level during first few seconds
+                if (!this.noiseGate.calibrated) {
+                    this.noiseGate.calibrationSamples.push(volumePercent);
+                    
+                    if (this.noiseGate.calibrationSamples.length >= 50) { // 50 samples ≈ 2-3 seconds
+                        // Calculate background noise level (median of samples)
+                        const sorted = [...this.noiseGate.calibrationSamples].sort((a, b) => a - b);
+                        this.noiseGate.backgroundNoiseLevel = sorted[Math.floor(sorted.length / 2)];
+                        
+                        // Set adaptive threshold: background + 8-15 units above noise floor
+                        this.noiseGate.volumeThreshold = Math.max(15, this.noiseGate.backgroundNoiseLevel + 12);
+                        
+                        this.noiseGate.calibrated = true;
+                        console.log(`🔊 Noise calibration complete: Background=${this.noiseGate.backgroundNoiseLevel}%, Threshold=${this.noiseGate.volumeThreshold}%`);
+                        
+                        // Show calibration results to user
+                        this.addMessage('system', 
+                            `🔊 <span style="color: green;">Voice detection calibrated</span> - Background: ${this.noiseGate.backgroundNoiseLevel}%, Speech threshold: ${this.noiseGate.volumeThreshold}%`
+                        );
+                    }
+                    return; // Still calibrating
+                }
+                
+                // 🎯 VOICE ACTIVITY DETECTION: Determine if current audio is speech
+                const isSpeech = volumePercent > this.noiseGate.volumeThreshold;
+                
+                if (isSpeech) {
+                    this.noiseGate.lastSpeechTime = now;
+                    
+                    // Start recording if we have sustained speech
+                    if (!this.noiseGate.isRecordingValid) {
+                        const speechDuration = now - (this.noiseGate.lastSilenceTime || now);
+                        if (speechDuration >= this.noiseGate.speechThreshold) {
+                            this.noiseGate.isRecordingValid = true;
+                            console.log(`🔊 Speech detected - Starting valid recording (${volumePercent}% > ${this.noiseGate.volumeThreshold}%)`);
+                            this.updateMicrophoneStatus('active', `🔊 Recording speech (${volumePercent}%)`);
+                        }
+                    }
+                } else {
+                    this.noiseGate.lastSilenceTime = now;
+                    
+                    // Stop recording if we have sustained silence
+                    if (this.noiseGate.isRecordingValid) {
+                        const silenceDuration = now - this.noiseGate.lastSpeechTime;
+                        if (silenceDuration >= this.noiseGate.silenceThreshold) {
+                            this.noiseGate.isRecordingValid = false;
+                            console.log(`🔇 Silence detected - Stopping recording (${silenceDuration}ms silence)`);
+                            this.updateMicrophoneStatus('idle', `🔇 Listening... (${volumePercent}%)`);
+                        }
+                    }
+                }
+            }
+
             updateMicrophoneStatus(status, message) {
                 this.micStatus.textContent = message;
                 
@@ -1224,12 +1394,55 @@
                 this.hangupButton.addEventListener('click', () => this.endCall());
                 this.interruptButton.addEventListener('click', () => this.interruptAI());
                 
+                // � EMERGENCY: Noise Gate Toggle Button
+                this.noiseGateButton.addEventListener('click', () => this.toggleNoiseGate());
+                
+                // �🔍 PERFORMANCE: Add keyboard shortcut for performance report (Ctrl+P)
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'p') {
+                        e.preventDefault();
+                        this.showPerformanceReport();
+                    }
+                });
+                
                 // Settings change handlers
                 this.languageSelect.addEventListener('change', () => this.updateSettings());
                 this.modelSelect.addEventListener('change', () => this.updateSettings());
                 this.speedSelect.addEventListener('change', () => this.updateSettings());
                 this.kidFriendlyToggle.addEventListener('change', () => this.updateSettings());
                 this.backgroundMusicToggle.addEventListener('change', () => this.updateSettings());
+            }
+
+            // 🔍 PERFORMANCE: Show detailed performance report
+            showPerformanceReport() {
+                const report = this.getPerformanceReport();
+                
+                let html = `<div style="font-family: monospace; background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 10px 0;">`;
+                html += `<h3>📊 COMPREHENSIVE PERFORMANCE REPORT</h3>`;
+                
+                // Current session
+                html += `<h4>Current Session:</h4>`;
+                for (const [stage, data] of Object.entries(this.performanceProfiler.stages)) {
+                    if (data.duration) {
+                        const emoji = this.getStageEmoji(stage);
+                        const color = this.getPerformanceColor(data.duration);
+                        html += `${emoji} <span style="color: ${color};">${stage}: ${data.duration.toFixed(0)}ms</span><br/>`;
+                    }
+                }
+                
+                // Averages
+                html += `<h4>Session Averages:</h4>`;
+                for (const [stage, stats] of Object.entries(report.averages)) {
+                    const emoji = this.getStageEmoji(stage);
+                    html += `${emoji} ${stage}: Avg ${stats.average}ms (${stats.count} samples)<br/>`;
+                    html += `&nbsp;&nbsp;&nbsp;Range: ${stats.min}ms - ${stats.max}ms<br/>`;
+                }
+                
+                html += `<br/><small>💡 Press Ctrl+P to show this report anytime</small>`;
+                html += `</div>`;
+                
+                this.conversationMessages.innerHTML += `<div class="message system-message">${html}</div>`;
+                this.conversationMessages.scrollTop = this.conversationMessages.scrollHeight;
             }
 
             async setupAudioPermissions() {
@@ -1243,10 +1456,297 @@
                 }
             }
 
+            // EMERGENCY INTERRUPT: Check for emergency keywords in transcribed text
+            checkEmergencyInterrupt(text) {
+                if (!text) return false;
+                
+                const textLower = text.toLowerCase().trim();
+                console.log('🎯 Checking for MAGIC WORD "okay-dokay" in:', textLower);
+                
+                for (const keyword of this.emergencyKeywords) {
+                    if (textLower.includes(keyword)) {
+                        const now = Date.now();
+                        // Reduced cooldown for more responsive magic word detection
+                        if (now - this.lastEmergencyTime > 1000) { // 1 second cooldown (was 3)
+                            this.lastEmergencyTime = now;
+                            console.log('🚨 MAGIC WORD DETECTED:', keyword);
+                            this.handleEmergencyInterrupt(keyword);
+                            return true;
+                        } else {
+                            console.log('🚨 Magic word detected but in cooldown period');
+                        }
+                    }
+                }
+                return false;
+            }
+
+            // EMERGENCY INTERRUPT: Handle emergency interrupt actions
+            handleEmergencyInterrupt(keyword) {
+                console.log('🚨 MAGIC WORD ACTIVATED - EXECUTING IMMEDIATE STOP...');
+                
+                // 1. IMMEDIATE AUDIO STOP - HIGHEST PRIORITY
+                this.stopCurrentAudio();
+                this.stopBackgroundMusic();
+                
+                // 2. Stop loading/processing indicators
+                this.showLoading(false);
+                this.hideProcessStatus();
+                
+                // 3. Send emergency interrupt signal to server
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify({
+                        type: 'emergency_interrupt',
+                        session_id: this.currentSessionId,
+                        keyword: keyword,
+                        timestamp: Date.now()
+                    }));
+                }
+                
+                // 4. Enhanced visual feedback for magic word
+                if (keyword.includes('okay-dokay') || keyword.includes('okaydokay')) {
+                    this.addMessage('system', `🎯 MAGIC WORD "${keyword}" activated - All audio stopped immediately!`);
+                    this.updateStatus('ready', '🎯 Magic word detected - Ready for new input');
+                } else {
+                    this.addMessage('system', `🚨 Emergency interrupt "${keyword}" activated`);
+                    this.updateStatus('ready', 'Emergency interrupt - ready for new input');
+                }
+                this.updateMicrophoneStatus('idle', 'Ready for input...');
+            }
+
+            // 🚨 OVERLAP DETECTION: Periodic check for overlapping audio
+            startOverlapDetection() {
+                // Check every 500ms for overlapping audio
+                this.overlapCheckInterval = setInterval(() => {
+                    const activeCount = this.activeAudioElements.size;
+                    const hasCurrentAudio = this.currentAudio && !this.currentAudio.paused;
+                    
+                    // If we have more than 1 active audio or current audio + other active elements
+                    if (activeCount > 1 || (hasCurrentAudio && activeCount > 0 && this.currentAudio && !this.activeAudioElements.has(this.currentAudio))) {
+                        console.log(`🚨 OVERLAP DETECTED: ${activeCount} active elements, current audio: ${hasCurrentAudio}`);
+                        this.addMessage('system', `🚨 Audio overlap detected (${activeCount} streams) - cleaning up`);
+                        this.stopCurrentAudio();
+                    }
+                }, 500);
+            }
+
+            // 🚨 OVERLAP DETECTION: Stop periodic overlap checking
+            stopOverlapDetection() {
+                if (this.overlapCheckInterval) {
+                    clearInterval(this.overlapCheckInterval);
+                    this.overlapCheckInterval = null;
+                }
+            }
+
+            // 🔍 PERFORMANCE PROFILER: Start timing a stage
+            startTiming(stageName) {
+                const now = performance.now();
+                this.performanceProfiler.stages[stageName] = {
+                    start: now,
+                    end: null,
+                    duration: null
+                };
+                this.performanceProfiler.currentStage = stageName;
+                console.log(`⏱️ TIMING START: ${stageName} at ${now.toFixed(2)}ms`);
+            }
+
+            // 🔍 PERFORMANCE PROFILER: End timing a stage
+            endTiming(stageName) {
+                const now = performance.now();
+                const stage = this.performanceProfiler.stages[stageName];
+                if (stage && stage.start) {
+                    stage.end = now;
+                    stage.duration = now - stage.start;
+                    console.log(`⏱️ TIMING END: ${stageName} took ${stage.duration.toFixed(2)}ms`);
+                    
+                    // Add to historical data
+                    if (this.performanceProfiler.totalTimes[stageName]) {
+                        this.performanceProfiler.totalTimes[stageName].push(stage.duration);
+                    }
+                    
+                    // Show timing in UI
+                    this.displayTimingInfo(stageName, stage.duration);
+                } else {
+                    console.warn(`⏱️ No start time found for stage: ${stageName}`);
+                }
+            }
+
+            // 🔍 PERFORMANCE PROFILER: Display timing info in conversation
+            displayTimingInfo(stageName, duration) {
+                const color = duration > 3000 ? 'red' : duration > 1000 ? 'orange' : 'green';
+                const emoji = duration > 3000 ? '🐌' : duration > 1000 ? '⚡' : '🚀';
+                this.addMessage('system', 
+                    `${emoji} <span style="color: ${color}; font-weight: bold;">${stageName}: ${duration.toFixed(0)}ms</span>`
+                );
+            }
+
+            // 🔍 PERFORMANCE PROFILER: Set server-side timing to override client estimates
+            setServerTiming(stageName, serverDurationMs) {
+                if (this.performanceProfiler.stages[stageName]) {
+                    const originalDuration = this.performanceProfiler.stages[stageName].duration;
+                    
+                    // Override with actual server timing
+                    this.performanceProfiler.stages[stageName].duration = serverDurationMs;
+                    this.performanceProfiler.stages[stageName].serverTiming = true;
+                    this.performanceProfiler.stages[stageName].originalClientDuration = originalDuration;
+                    
+                    console.log(`⚡ Server timing override: ${stageName} - Client: ${originalDuration}ms → Server: ${serverDurationMs}ms`);
+                    
+                    // Update total times with server data
+                    if (this.performanceProfiler.totalTimes[stageName]) {
+                        this.performanceProfiler.totalTimes[stageName].push(serverDurationMs);
+                    }
+                }
+            }
+
+            // 🔍 PERFORMANCE PROFILER: Display real-time stats during conversation
+            displayRealTimeStats() {
+                const stages = this.performanceProfiler.stages;
+                let quickStats = [];
+                
+                // 🌐 NETWORK & QUEUE DELAYS - Show hidden delays
+                if (this.timingEnhancements.networkLatency > 0) {
+                    quickStats.push(`🌐 Network: ${this.timingEnhancements.networkLatency}ms`);
+                }
+                
+                if (this.timingEnhancements.queueTime > 0) {
+                    quickStats.push(`📋 Queue: ${this.timingEnhancements.queueTime}ms`);
+                }
+                
+                // 🔊 NOISE GATE STATUS - Show voice detection
+                if (this.noiseGate.calibrated) {
+                    const gateStatus = this.noiseGate.isRecordingValid ? '🔊' : '🔇';
+                    quickStats.push(`${gateStatus} Gate: ${this.noiseGate.volumeThreshold}%`);
+                }
+                
+                if (stages.llmProcessing?.duration) {
+                    const isServerTiming = stages.llmProcessing.serverTiming;
+                    const emoji = isServerTiming ? "🌐" : "📱";
+                    quickStats.push(`${emoji} LLM: ${stages.llmProcessing.duration.toFixed(0)}ms`);
+                }
+                
+                if (stages.ttsGeneration?.duration) {
+                    const isServerTiming = stages.ttsGeneration.serverTiming;
+                    const emoji = isServerTiming ? "🌐" : "📱";
+                    quickStats.push(`${emoji} TTS: ${stages.ttsGeneration.duration.toFixed(0)}ms`);
+                }
+                
+                if (stages.endToEnd?.duration) {
+                    quickStats.push(`⚡ Total: ${stages.endToEnd.duration.toFixed(0)}ms`);
+                }
+                
+                if (quickStats.length > 0) {
+                    const statsMessage = `📊 ${quickStats.join(' | ')}`;
+                    this.addMessage('system', `<span style="color: #666; font-size: 0.9em;">${statsMessage}</span>`);
+                    console.log(`🔍 Comprehensive stats: ${quickStats.join(' | ')}`);
+                }
+            }
+
+            // 🔍 PERFORMANCE PROFILER: Get comprehensive timing report
+            getPerformanceReport() {
+                const report = {
+                    currentSession: this.performanceProfiler.stages,
+                    averages: {}
+                };
+                
+                // Calculate averages for each stage
+                for (const [stage, times] of Object.entries(this.performanceProfiler.totalTimes)) {
+                    if (times.length > 0) {
+                        const avg = times.reduce((a, b) => a + b, 0) / times.length;
+                        const min = Math.min(...times);
+                        const max = Math.max(...times);
+                        report.averages[stage] = {
+                            average: avg.toFixed(2),
+                            min: min.toFixed(2),
+                            max: max.toFixed(2),
+                            count: times.length
+                        };
+                    }
+                }
+                
+                console.table(report.averages);
+                return report;
+            }
+
+            // 🔍 PERFORMANCE PROFILER: Display comprehensive performance summary
+            displayPerformanceSummary() {
+                const stages = this.performanceProfiler.stages;
+                if (!stages.endToEnd || !stages.endToEnd.duration) return;
+                
+                const totalTime = stages.endToEnd.duration;
+                
+                // Create detailed breakdown
+                const breakdown = [];
+                const stageOrder = ['audioCapture', 'audioTransfer', 'sttProcessing', 'llmProcessing', 'ttsGeneration', 'audioPlayback'];
+                
+                let html = `<div style="font-family: monospace; background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 5px 0;">`;
+                html += `<strong>🔍 PERFORMANCE BREAKDOWN (Total: ${totalTime.toFixed(0)}ms)</strong><br/>`;
+                
+                for (const stage of stageOrder) {
+                    if (stages[stage] && stages[stage].duration) {
+                        const duration = stages[stage].duration;
+                        const percentage = ((duration / totalTime) * 100).toFixed(1);
+                        const emoji = this.getStageEmoji(stage);
+                        const color = this.getPerformanceColor(duration);
+                        const isServerTiming = stages[stage].serverTiming;
+                        const timingSource = isServerTiming ? "🌐" : "📱";
+                        
+                        let timingInfo = `${timingSource} ${stage}: ${duration.toFixed(0)}ms (${percentage}%)`;
+                        
+                        // Show client vs server timing comparison if available
+                        if (isServerTiming && stages[stage].originalClientDuration) {
+                            const clientDuration = stages[stage].originalClientDuration;
+                            timingInfo += ` [Client: ${clientDuration.toFixed(0)}ms]`;
+                        }
+                        
+                        html += `${emoji} <span style="color: ${color};">${timingInfo}</span><br/>`;
+                        breakdown.push({ stage, duration, percentage });
+                    }
+                }
+                
+                // Identify bottleneck
+                const slowest = breakdown.reduce((max, current) => 
+                    current.duration > max.duration ? current : max, { duration: 0 });
+                
+                if (slowest.duration > 0) {
+                    html += `<br/><strong style="color: red;">🐌 BOTTLENECK: ${slowest.stage} (${slowest.percentage}%)</strong>`;
+                }
+                
+                html += `</div>`;
+                
+                // Add to conversation
+                this.conversationMessages.innerHTML += `<div class="message system-message">${html}</div>`;
+                this.conversationMessages.scrollTop = this.conversationMessages.scrollHeight;
+            }
+
+            // 🔍 Helper functions for performance display
+            getStageEmoji(stage) {
+                const emojis = {
+                    audioCapture: '🎙️',
+                    audioTransfer: '📡',
+                    sttProcessing: '👂',
+                    llmProcessing: '🧠',
+                    ttsGeneration: '🗣️',
+                    audioPlayback: '🔊',
+                    endToEnd: '⏱️'
+                };
+                return emojis[stage] || '⚡';
+            }
+
+            getPerformanceColor(duration) {
+                if (duration > 3000) return '#ff4444';      // Red for >3s
+                if (duration > 1000) return '#ff8800';      // Orange for >1s
+                if (duration > 500) return '#ffaa00';       // Yellow for >500ms
+                return '#00aa00';                           // Green for <500ms
+            }
+
             async startCall() {
                 try {
                     this.updateCallState('dialing');
                     this.currentSessionId = this.generateSessionId();
+                    
+                    // 🚨 START OVERLAP DETECTION
+                    this.startOverlapDetection();
+                    console.log('🚨 Overlap detection started for call session');
                     
                     // Request microphone access
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1287,38 +1787,169 @@
                     this.websocket = new WebSocket(wsUrl);
                     
                     this.websocket.onopen = () => {
-                        console.log('WebSocket connected');
+                        console.log('🌐 WebSocket connected successfully');
+                        this.websocketConfig.reconnectAttempts = 0;
+                        this.websocketConfig.isReconnecting = false;
+                        this.reconnectionAttempts = 0; // Reset reconnection counter
+                        
+                        // Update WebSocket status indicator
+                        this.updateWebSocketStatus('connected');
+                        
+                        // Start connection monitoring
+                        this.startWebSocketMonitoring();
+                        
+                        this.addMessage('system', '✅ <span style="color: green;">Connection established</span>');
+                        
                         this.websocket.send(JSON.stringify({
                             type: 'session_start',
                             session_id: this.currentSessionId,
                             settings: this.getCallSettings()
                         }));
+                        
+                        this.addMessage('system', '🌐 <span style="color: green;">WebSocket connected</span>');
                         resolve();
                     };
                     
                     this.websocket.onmessage = (event) => {
-                        console.log('WebSocket message received:', event.data);
+                        console.log('📨 WebSocket message received:', event.data);
+                        this.websocketConfig.lastPingTime = Date.now();
+                        
                         try {
                             const data = JSON.parse(event.data);
-                            console.log('Parsed WebSocket message:', data);
+                            console.log('📊 Parsed WebSocket message:', data);
                             this.handleWebSocketMessage(data);
                         } catch (error) {
-                            console.error('Failed to parse WebSocket message:', error, 'Raw data:', event.data);
+                            console.error('❌ Failed to parse WebSocket message:', error, 'Raw data:', event.data);
                         }
                     };
                     
                     this.websocket.onerror = (error) => {
-                        console.error('WebSocket error:', error);
-                        reject(error);
+                        console.error('🚨 WebSocket error:', error);
+                        this.updateWebSocketStatus('error');
+                        this.addMessage('system', '🚨 <span style="color: red;">WebSocket error - attempting reconnection</span>');
+                        this.attemptWebSocketReconnection();
                     };
                     
-                    this.websocket.onclose = () => {
-                        console.log('WebSocket disconnected');
-                        if (this.callState === 'connected') {
-                            this.endCall();
+                    this.websocket.onclose = (event) => {
+                        console.log('💔 WebSocket disconnected:', event.code, event.reason);
+                        this.updateWebSocketStatus('disconnected');
+                        this.stopWebSocketMonitoring();
+                        
+                        // Enhanced reconnection logic for audio processing
+                        if (this.callState === 'connected' && !this.websocketConfig.isReconnecting) {
+                            this.addMessage('system', '💔 <span style="color: orange;">Connection lost during call - attempting automatic reconnection</span>');
+                            
+                            // Use our simpler reconnection handler
+                            this.handleWebSocketReconnection();
+                        } else if (event.code !== 1000 && event.code !== 1001) {
+                            // Unexpected disconnection
+                            this.addMessage('system', `⚠️ <span style="color: red;">Unexpected disconnection (code: ${event.code})</span>`);
+                            this.handleWebSocketReconnection();
                         }
                     };
                 });
+            }
+
+            // 🌐 WEBSOCKET MONITORING: Keep connection alive and detect issues
+            startWebSocketMonitoring() {
+                this.websocketConfig.lastPingTime = Date.now();
+                
+                this.websocketConfig.pingInterval = setInterval(() => {
+                    const now = Date.now();
+                    const timeSinceLastMessage = now - this.websocketConfig.lastPingTime;
+                    
+                    // If no message received in 60 seconds, connection may be dead (increased from 30s)
+                    if (timeSinceLastMessage > 60000) {
+                        console.warn('🚨 WebSocket appears inactive - attempting reconnection');
+                        this.attemptWebSocketReconnection();
+                        return;
+                    }
+                    
+                    // Send ping to keep connection alive
+                    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                        this.websocket.send(JSON.stringify({
+                            type: 'ping',
+                            timestamp: now
+                        }));
+                    }
+                }, 15000); // Check every 15 seconds
+            }
+
+            stopWebSocketMonitoring() {
+                if (this.websocketConfig.pingInterval) {
+                    clearInterval(this.websocketConfig.pingInterval);
+                    this.websocketConfig.pingInterval = null;
+                }
+            }
+
+            // 🔄 WEBSOCKET RECONNECTION: Auto-reconnect on connection loss
+            async attemptWebSocketReconnection() {
+                if (this.websocketConfig.isReconnecting) return;
+                
+                this.websocketConfig.isReconnecting = true;
+                this.websocketConfig.reconnectAttempts++;
+                this.updateWebSocketStatus('reconnecting');
+                
+                if (this.websocketConfig.reconnectAttempts > this.websocketConfig.maxReconnectAttempts) {
+                    console.error('🚨 Max WebSocket reconnection attempts reached');
+                    this.addMessage('system', '🚨 <span style="color: red;">Connection failed - please refresh page</span>');
+                    this.updateWebSocketStatus('error');
+                    this.websocketConfig.isReconnecting = false;
+                    return;
+                }
+                
+                console.log(`🔄 WebSocket reconnection attempt ${this.websocketConfig.reconnectAttempts}/${this.websocketConfig.maxReconnectAttempts}`);
+                this.addMessage('system', `🔄 Reconnecting... (${this.websocketConfig.reconnectAttempts}/${this.websocketConfig.maxReconnectAttempts})`);
+                
+                // Close existing connection
+                if (this.websocket) {
+                    this.websocket.close();
+                }
+                
+                // Wait before reconnecting
+                await new Promise(resolve => setTimeout(resolve, this.websocketConfig.reconnectDelay));
+                
+                try {
+                    await this.setupWebSocket();
+                    console.log('✅ WebSocket reconnection successful');
+                    this.addMessage('system', '✅ <span style="color: green;">WebSocket reconnected successfully</span>');
+                } catch (error) {
+                    console.error('❌ WebSocket reconnection failed:', error);
+                    this.websocketConfig.isReconnecting = false;
+                    
+                    // Exponential backoff
+                    this.websocketConfig.reconnectDelay *= 2;
+                    setTimeout(() => this.attemptWebSocketReconnection(), this.websocketConfig.reconnectDelay);
+                }
+            }
+
+            // 🌐 WEBSOCKET STATUS: Update connection status indicator
+            updateWebSocketStatus(status) {
+                const indicator = document.getElementById('wsIndicator');
+                if (!indicator) return;
+                
+                switch (status) {
+                    case 'connected':
+                        indicator.innerHTML = '🟢 Connected';
+                        indicator.style.color = '#28a745';
+                        break;
+                    case 'connecting':
+                        indicator.innerHTML = '🟡 Connecting...';
+                        indicator.style.color = '#ffc107';
+                        break;
+                    case 'disconnected':
+                        indicator.innerHTML = '🔴 Disconnected';
+                        indicator.style.color = '#dc3545';
+                        break;
+                    case 'error':
+                        indicator.innerHTML = '🚨 Error';
+                        indicator.style.color = '#dc3545';
+                        break;
+                    case 'reconnecting':
+                        indicator.innerHTML = '🔄 Reconnecting...';
+                        indicator.style.color = '#007bff';
+                        break;
+                }
             }
 
             setupAudioRecording(stream) {
@@ -1352,8 +1983,8 @@
                     console.error('MediaRecorder error:', event.error);
                 };
 
-                // Record in shorter chunks for more responsive processing
-                console.log('Starting MediaRecorder...');
+                // 🎯 ENHANCED: Record in longer chunks with smart buffering
+                console.log('Starting MediaRecorder with enhanced buffering...');
                 this.mediaRecorder.start();
                 this.recordingInterval = setInterval(() => {
                     if (this.mediaRecorder.state === 'recording') {
@@ -1363,46 +1994,169 @@
                     } else {
                         console.warn('MediaRecorder not in recording state:', this.mediaRecorder.state);
                     }
-                }, 2000); // Send audio every 2 seconds for better responsiveness
+                }, 1500); // Shorter chunks (1.5s) for better buffering but less fragmentation
             }
 
+            // 🎯 ENHANCED AUDIO BUFFERING: Smart buffering with emergency bypass
             sendAudioData(audioBlob) {
-                console.log('sendAudioData called with blob size:', audioBlob.size);
-                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-                    console.log('WebSocket is open, preparing to send audio data');
-                    // Start the process flow
-                    this.startProcessFlow();
-                    
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        // Complete listening stage and move to transfer
-                        this.completeListening();
-                        
-                        const audioData = reader.result.split(',')[1]; // Remove data URL prefix
-                        const message = {
-                            type: 'audio_data',
-                            session_id: this.currentSessionId,
-                            audio_data: audioData,
-                            timestamp: Date.now()
-                        };
-                        console.log('Sending WebSocket message:', {
-                            type: message.type,
-                            session_id: message.session_id,
-                            audio_data_length: audioData ? audioData.length : 0,
-                            timestamp: message.timestamp
-                        });
-                        this.websocket.send(JSON.stringify(message));
-                    };
-                    reader.onerror = (error) => {
-                        console.error('FileReader error:', error);
-                    };
-                    reader.readAsDataURL(audioBlob);
+                const now = Date.now();
+                console.log('🎵 Audio chunk received:', audioBlob.size, 'bytes');
+                
+                // 🚨 EMERGENCY BYPASS: Skip noise gate if in bypass mode
+                if (this.noiseGate.bypassMode) {
+                    console.log('🚨 BYPASS MODE: Processing all audio without noise gate');
                 } else {
-                    console.error('WebSocket not ready. State:', this.websocket ? this.websocket.readyState : 'null');
+                    // 🔊 NOISE GATE: Only process audio if voice activity was detected
+                    if (!this.noiseGate.calibrated) {
+                        console.log('🔊 Dropping audio - noise gate still calibrating');
+                        return;
+                    }
+                    
+                    if (!this.noiseGate.isRecordingValid && !this.noiseGate.manualOverride) {
+                        console.log('🔇 Dropping audio - no voice activity detected (background noise)');
+                        return;
+                    }
+                }
+                
+                // Audio passed noise gate or is bypassed - process normally
+                const hasSignificantAudio = audioBlob.size >= this.speechThreshold;
+                
+                if (hasSignificantAudio) {
+                    // Add to buffer and update speech time
+                    this.audioBuffer.push(audioBlob);
+                    this.lastSpeechTime = now;
+                    
+                    // Start buffer timer on first chunk
+                    if (this.audioBuffer.length === 1) {
+                        this.bufferStartTime = now;
+                        const mode = this.noiseGate.bypassMode ? 'BYPASS' : 'FILTERED';
+                        console.log(`🎵 Started new audio buffer with ${mode} mode`);
+                    }
+                    
+                    console.log(`🎵 Added to buffer (${this.audioBuffer.length} chunks, ${this.getTotalBufferSize()}KB)`);
+                } else {
+                    console.log('🔇 Audio chunk too small, likely noise artifact');
+                }
+                
+                // Check if we should send the buffer
+                const timeSinceLastSpeech = now - this.lastSpeechTime;
+                const totalBufferTime = now - this.bufferStartTime;
+                const shouldSendBuffer = this.audioBuffer.length > 0 && (
+                    timeSinceLastSpeech >= this.silenceTimeout ||  // 3 seconds of silence
+                    totalBufferTime >= this.maxBufferTime          // 8 seconds max buffer
+                );
+                
+                if (shouldSendBuffer) {
+                    this.sendBufferedAudio();
                 }
             }
 
+            // 🎯 ENHANCED: Get total size of audio buffer
+            getTotalBufferSize() {
+                return Math.round(this.audioBuffer.reduce((total, blob) => total + blob.size, 0) / 1024);
+            }
+
+            // 🎯 ENHANCED: Send accumulated audio buffer as one chunk
+            async sendBufferedAudio() {
+                if (this.audioBuffer.length === 0) return;
+                
+                // 🔍 COMPREHENSIVE PERFORMANCE TIMING: Track all delays
+                const transmissionStart = performance.now();
+                this.startTiming('endToEnd');
+                this.startTiming('audioCapture');
+                this.startTiming('networkLatency'); // Track actual network round-trip
+                
+                console.log(`🚀 Sending buffered audio: ${this.audioBuffer.length} chunks, ${this.getTotalBufferSize()}KB`);
+                
+                try {
+                    // Combine all audio chunks into one blob
+                    const combinedBlob = new Blob(this.audioBuffer, { type: 'audio/webm' });
+                    console.log(`🎵 Combined audio blob: ${Math.round(combinedBlob.size / 1024)}KB`);
+                    
+                    this.endTiming('audioCapture');
+                    this.startTiming('audioTransfer');
+                    
+                    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                        this.startProcessFlow();
+                        
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            this.completeListening();
+                            
+                            const audioData = reader.result.split(',')[1]; // Remove data URL prefix
+                            
+                            // 🔍 TIMING: Measure WebSocket send time
+                            const websocketSendStart = performance.now();
+                            const message = {
+                                type: 'audio_data',
+                                session_id: this.currentSessionId,
+                                audio_data: audioData,
+                                timestamp: Date.now(),
+                                client_sent_at: Date.now(), // For network latency calculation
+                                is_silence: false,  // Buffered audio is never silence
+                                buffer_info: {
+                                    chunks: this.audioBuffer.length,
+                                    total_size_kb: this.getTotalBufferSize(),
+                                    duration_ms: Date.now() - this.bufferStartTime
+                                },
+                                // 🔍 COMPREHENSIVE TIMING DATA
+                                client_timing: {
+                                    audio_capture_ms: this.performanceProfiler.stages.audioCapture?.duration || 0,
+                                    transfer_start: performance.now(),
+                                    noise_gate_calibrated: this.noiseGate.calibrated,
+                                    speech_threshold: this.noiseGate.volumeThreshold,
+                                    background_noise: this.noiseGate.backgroundNoiseLevel
+                                }
+                            };
+                            
+                            // Store send time for latency calculation
+                            this.timingEnhancements.lastSendTime = Date.now();
+                            
+                            console.log('🚀 Sending combined audio:', {
+                                type: message.type,
+                                chunks: message.buffer_info.chunks,
+                                size_kb: message.buffer_info.total_size_kb,
+                                duration_ms: message.buffer_info.duration_ms,
+                                capture_time: message.client_timing.audio_capture_ms
+                            });
+                            
+                            this.websocket.send(JSON.stringify(message));
+                            this.endTiming('audioTransfer');
+                            this.wasRecentlySpeaking = true;
+                        };
+                        reader.readAsDataURL(combinedBlob);
+                    }
+                } catch (error) {
+                    console.error('🚨 Error sending buffered audio:', error);
+                    this.endTiming('audioCapture');
+                    this.endTiming('audioTransfer');
+                }
+                
+                // Clear the buffer
+                this.audioBuffer = [];
+                this.bufferStartTime = 0;
+                console.log('🎵 Audio buffer cleared');
+            }
+
             handleWebSocketMessage(data) {
+                // 🔍 COMPREHENSIVE TIMING: Track all server response delays
+                const serverResponseTime = performance.now();
+                const messageReceived = Date.now();
+                
+                // 🔍 TIMING: Calculate network latency if we have transmission timestamps
+                if (data.server_received_at && this.timingEnhancements.lastSendTime) {
+                    const networkLatency = data.server_received_at - this.timingEnhancements.lastSendTime;
+                    this.timingEnhancements.networkLatency = networkLatency;
+                    console.log(`🌐 Network latency: ${networkLatency}ms`);
+                }
+                
+                // 🔍 TIMING: Track server processing queue depth
+                if (data.queue_info) {
+                    this.timingEnhancements.serverQueueDepth = data.queue_info.depth || 0;
+                    this.timingEnhancements.queueTime = data.queue_info.wait_time || 0;
+                    console.log(`📋 Server queue: ${this.timingEnhancements.serverQueueDepth} items, ${this.timingEnhancements.queueTime}ms wait`);
+                }
+                
                 switch (data.type) {
                     case 'process_status':
                         // Handle process status updates
@@ -1411,7 +2165,53 @@
                         }
                         break;
                         
+                    case 'processing_started':
+                        // Enhanced: Handle LLM processing start notification
+                        this.updateMicrophoneStatus('processing', 'AI is processing your request...');
+                        console.log('🤖 LLM processing started');
+                        break;
+                        
+                    case 'llm_completed':
+                        // Enhanced: Handle LLM completion notification
+                        this.updateMicrophoneStatus('processing', 'Generating audio...');
+                        if (data.text_preview) {
+                            console.log('✅ LLM completed, preview:', data.text_preview);
+                        }
+                        break;
+                        
+                    case 'tts_started':
+                        // Enhanced: Handle TTS start notification
+                        this.updateMicrophoneStatus('processing', 'Converting text to speech...');
+                        console.log('🔊 TTS processing started');
+                        break;
+                        
+                    case 'tts_completed':
+                        // Enhanced: Handle TTS completion notification
+                        this.updateMicrophoneStatus('processing', 'Audio ready, playing...');
+                        console.log('✅ TTS completed, audio ready');
+                        break;
+                        
+                    case 'preflight_test':
+                        // Enhanced: Handle pre-flight connection test
+                        console.log('✅ Pre-flight connection test received');
+                        break;
+                        
+                    case 'audio_chunk':
+                        // Enhanced: Handle chunked audio delivery
+                        this.handleAudioChunk(data);
+                        break;
+                        
                     case 'transcription':
+                        // 🔍 TIMING: STT processing complete
+                        this.endTiming('sttProcessing');
+                        this.startTiming('llmProcessing');
+                        
+                        // EMERGENCY INTERRUPT: Check for emergency keywords in WebSocket transcription
+                        if (data.text && this.checkEmergencyInterrupt(data.text)) {
+                            console.log('🚨 Emergency interrupt detected in WebSocket transcription, stopping processing');
+                            return; // Stop all further processing
+                        }
+                        
                         this.completeSpeechRecognition(data.text);
                         this.completeTransfer();
                         this.addMessage('user', data.text);
@@ -1420,12 +2220,35 @@
                         // Temporarily pause audio visualization during processing
                         this.updateMicrophoneStatus('processing', 'Processing speech...');
                         
+                        // 🔍 TIMING: Start STT processing timing
+                        this.startTiming('sttProcessing');
+                        
                         if (data.processing_time) {
-                            console.log(`STT processing time: ${data.processing_time.toFixed(2)}s`);
+                            console.log(`⏱️ Server STT processing time: ${data.processing_time.toFixed(2)}s`);
                         }
                         break;
                         
                     case 'ai_response':
+                        // 🔍 TIMING: Complete AI processing with server timing data
+                        this.endTiming('llmProcessing');
+                        this.endTiming('ttsGeneration');
+                        
+                        // 🎯 INTEGRATE SERVER TIMING: Replace client estimates with actual server data
+                        if (data.timing) {
+                            // Override client timings with actual server processing times
+                            this.performanceProfiler.setServerTiming('llmProcessing', data.timing.llm_time * 1000);
+                            this.performanceProfiler.setServerTiming('ttsGeneration', data.timing.tts_time * 1000);
+                            
+                            console.log(`⏱️ Server processing times integrated:`, data.timing);
+                            
+                            // Display accurate server timing in performance profiler
+                            this.performanceProfiler.displayRealTimeStats();
+                        }
+                        
+                        // 🌐 CONNECTION SUCCESS: Reset reconnection attempts on successful response
+                        this.reconnectionAttempts = 0;
+                        console.log('✅ Audio response received successfully - WebSocket connection stable');
+                        
                         this.completeLLMProcessing();
                         this.completeTTSProcessing();
                         this.showLoading(false);
@@ -1435,10 +2258,12 @@
                         this.updateMicrophoneStatus('idle', 'Listening...');
                         
                         if (data.audio) {
+                            // 🔍 TIMING: Start audio playback (client-side timing)
+                            this.startTiming('audioPlayback');
                             this.playAudioResponse(data.audio);
-                        }
-                        if (data.timing) {
-                            console.log(`AI processing times:`, data.timing);
+                        } else {
+                            // No audio received - possible WebSocket issue
+                            this.addMessage('system', '⚠️ <span style="color: orange;">Text response received but no audio - possible connection issue</span>');
                         }
                         break;
                         
@@ -1455,11 +2280,21 @@
                         
                     case 'interrupt':
                     case 'interrupt_confirmed':
-                        // Phase 3: Handle interrupt confirmations
+                        // Enhanced interrupt handling for both manual and auto interrupts
                         this.stopCurrentAudio();
                         this.stopBackgroundMusic();
                         this.showLoading(false);
-                        this.updateStatus('success', data.message || 'AI interrupted');
+                        
+                        // Show different messages for different interrupt types
+                        let interruptMessage = data.message || 'AI interrupted';
+                        if (data.interrupt_type === 'auto_interrupt') {
+                            interruptMessage = data.message || 'AI paused for you to speak';
+                            this.addMessage('system', '🤖 ' + interruptMessage);
+                        } else {
+                            this.addMessage('system', '⏸️ ' + interruptMessage);
+                        }
+                        
+                        this.updateStatus('success', interruptMessage);
                         this.resetProcessStages();
                         break;
                         
@@ -1499,28 +2334,154 @@
                             }
                         }
                         break;
+                        
+                    case 'heartbeat':
+                    case 'ping':
+                        // Handle server heartbeat/ping messages to maintain connection
+                        console.log('💓 Received heartbeat from server');
+                        // Optionally respond with pong if needed
+                        break;
+                }
+            }
+
+            // Enhanced: Handle chunked audio delivery
+            handleAudioChunk(data) {
+                console.log(`🔍 DEBUG: handleAudioChunk called with:`, data);
+                
+                if (!this.audioChunks) {
+                    this.audioChunks = [];
+                    console.log(`🔍 DEBUG: Initialized audioChunks array`);
+                }
+                
+                // Store the chunk
+                this.audioChunks[data.chunk_index] = data.audio_chunk;
+                
+                console.log(`📦 Received audio chunk ${data.chunk_index + 1}/${data.total_chunks} (${data.audio_chunk ? data.audio_chunk.length : 0} chars)`);
+                console.log(`🔍 DEBUG: Current chunks array length: ${this.audioChunks.length}, expected: ${data.total_chunks}`);
+                
+                // Check how many chunks we have
+                const receivedChunks = this.audioChunks.filter(chunk => chunk !== undefined).length;
+                console.log(`🔍 DEBUG: Received ${receivedChunks}/${data.total_chunks} chunks`);
+                
+                // If we have all chunks, combine and play
+                if (receivedChunks === data.total_chunks) {
+                    console.log(`🎵 All chunks received! Combining audio...`);
+                    
+                    const completeAudio = this.audioChunks.join('');
+                    console.log(`🎵 Complete audio assembled: ${completeAudio.length} chars`);
+                    
+                    // Play the complete audio
+                    console.log(`🎵 Calling playAudioResponse...`);
+                    this.playAudioResponse(completeAudio);
+                    
+                    // Add text message if provided
+                    if (data.text) {
+                        console.log(`📝 Adding AI message: ${data.text}`);
+                        this.addMessage('ai', data.text);
+                    }
+                    
+                    // Handle timing data if provided
+                    if (data.timing) {
+                        this.performanceProfiler.setServerTiming('llmProcessing', data.timing.llm_time * 1000);
+                        this.performanceProfiler.setServerTiming('ttsGeneration', data.timing.tts_time * 1000);
+                        this.performanceProfiler.displayRealTimeStats();
+                    }
+                    
+                    // Reset for next audio
+                    this.audioChunks = [];
+                    this.showLoading(false);
+                    this.updateMicrophoneStatus('idle', 'Listening...');
+                    
+                    console.log(`✅ Audio chunk processing complete`);
+                } else {
+                    console.log(`⏳ Still waiting for more chunks: ${receivedChunks}/${data.total_chunks}`);
                 }
             }
 
             playAudioResponse(audioBase64) {
+                console.log(`🎵 DEBUG: playAudioResponse called with ${audioBase64 ? audioBase64.length : 0} chars`);
                 try {
+                    if (!audioBase64) {
+                        console.error('❌ No audio data received');
+                        this.addMessage('system', '❌ <span style="color: red;">No audio data - WebSocket connection issue</span>');
+                        return;
+                    }
+                    
+                    console.log(`🎵 DEBUG: Audio data validated, proceeding with playback...`);
+                    
+                    // 🚨 OVERLAP DETECTION: Check if audio is already playing
+                    const now = Date.now();
+                    const timeSinceLastAudio = now - this.lastAudioStartTime;
+                    
+                    // If another audio started within last 2 seconds, it's likely an overlap
+                    if (this.currentAudio && !this.currentAudio.paused && timeSinceLastAudio < 2000) {
+                        console.log('🚨 OVERLAP DETECTED: Stopping previous audio before playing new one');
+                        this.addMessage('system', '🚨 Overlap detected - stopping previous AI response');
+                        this.stopCurrentAudio();
+                        this.audioOverlapDetected = true;
+                    }
+                    
                     // Stop any existing background music
                     this.stopBackgroundMusic();
                     
+                    console.log(`🔊 Creating audio element from ${audioBase64.length} bytes of base64 data`);
                     const audio = new Audio('data:audio/wav;base64,' + audioBase64);
                     audio.volume = 1.0; // Full volume for AI response
                     
-                    audio.play().catch(error => {
-                        console.error('Failed to play AI audio response:', error);
-                        this.addMessage('system', 'Audio playback failed - check browser permissions');
+                    // 🚨 ENHANCED ERROR HANDLING
+                    audio.onerror = (error) => {
+                        console.error('🚨 Audio playback error:', error);
+                        this.addMessage('system', '🚨 <span style="color: red;">Audio playback failed</span>');
+                        this.activeAudioElements.delete(audio);
+                    };
+                    
+                    audio.onloadstart = () => {
+                        console.log('🎵 Audio loading started');
+                    };
+                    
+                    audio.oncanplaythrough = () => {
+                        console.log('✅ Audio ready to play');
+                        this.addMessage('system', '🔊 <span style="color: blue;">AI audio ready</span>');
+                    };
+                    
+                    // 🚨 OVERLAP PREVENTION: Track this audio element
+                    this.activeAudioElements.add(audio);
+                    this.lastAudioStartTime = now;
+                    
+                    audio.play().then(() => {
+                        console.log('✅ Audio playback started successfully');
+                    }).catch(error => {
+                        console.error('❌ Failed to play AI audio response:', error);
+                        this.addMessage('system', '❌ <span style="color: red;">Audio playback failed - check browser permissions</span>');
+                        this.activeAudioElements.delete(audio);
                     });
                     
                     // Track current audio for interrupt functionality
                     this.currentAudio = audio;
                     
                     audio.onended = () => {
+                        // 🔍 TIMING: Audio playback complete, end full cycle
+                        this.endTiming('audioPlayback');
+                        this.endTiming('endToEnd');
+                        
                         this.currentAudio = null;
+                        this.activeAudioElements.delete(audio);
+                        console.log('🎵 Audio playback completed normally');
+                        
+                        // 🔍 DISPLAY COMPLETE CYCLE PERFORMANCE
+                        this.displayPerformanceSummary();
                     };
+                    
+                    audio.onerror = () => {
+                        console.error('🚨 Audio playback error detected');
+                        this.endTiming('audioPlayback');
+                        this.endTiming('endToEnd');
+                        this.activeAudioElements.delete(audio);
+                        if (this.currentAudio === audio) {
+                            this.currentAudio = null;
+                        }
+                    };
+                    
                 } catch (error) {
                     console.error('Error creating audio element:', error);
                 }
@@ -1555,15 +2516,93 @@
 
             // Phase 3: Stop current AI audio (for interrupts)
             stopCurrentAudio() {
+                // 🚨 ENHANCED: Stop ALL active audio elements to prevent overlap
+                console.log(`🚨 IMMEDIATE AUDIO STOP - Found ${this.activeAudioElements.size} active elements`);
+                
+                // Stop current primary audio IMMEDIATELY
                 if (this.currentAudio) {
-                    this.currentAudio.pause();
-                    this.currentAudio.currentTime = 0;
-                    this.currentAudio = null;
+                    try {
+                        this.currentAudio.pause();
+                        this.currentAudio.currentTime = 0;
+                        this.currentAudio = null;
+                        console.log('🚨 Primary audio stopped immediately');
+                    } catch (error) {
+                        console.error('Error stopping primary audio:', error);
+                    }
                 }
+                
+                // Stop ALL tracked audio elements (catches any overlapping audio)
+                this.activeAudioElements.forEach(audio => {
+                    try {
+                        if (!audio.paused) {
+                            console.log('🚨 Stopping overlapping audio element');
+                            audio.pause();
+                            audio.currentTime = 0;
+                        }
+                    } catch (error) {
+                        console.error('Error stopping audio element:', error);
+                    }
+                });
+                
+                // 🎯 NUCLEAR OPTION: Stop ALL audio elements in the entire page
+                const allAudioElements = document.querySelectorAll('audio');
+                allAudioElements.forEach(audio => {
+                    try {
+                        if (!audio.paused) {
+                            console.log('🚨 NUCLEAR: Stopping any remaining audio element');
+                            audio.pause();
+                            audio.currentTime = 0;
+                        }
+                    } catch (error) {
+                        console.error('Error stopping page audio element:', error);
+                    }
+                });
+                
+                // Clear the active audio set
+                this.activeAudioElements.clear();
+                console.log('🚨 ALL AUDIO ELEMENTS STOPPED AND CLEARED - SILENCE ACHIEVED');
+            }
+            
+            handleWebSocketReconnection() {
+                if (this.reconnectionAttempts >= this.maxReconnectionAttempts) {
+                    console.log('🚨 Max reconnection attempts reached, stopping');
+                    this.addMessage('system', '❌ <span style="color: red;">Connection lost and could not be restored</span>');
+                    return;
+                }
+                
+                this.reconnectionAttempts++;
+                console.log(`🔄 Attempting WebSocket reconnection #${this.reconnectionAttempts}...`);
+                this.addMessage('system', `🔄 Connection lost, attempting to reconnect... (${this.reconnectionAttempts}/${this.maxReconnectionAttempts})`);
+                
+                // Close existing connection if any
+                if (this.websocket) {
+                    this.websocket.close();
+                }
+                
+                // Wait a moment then reconnect
+                setTimeout(() => {
+                    this.initializeWebSocket();
+                }, 1000 * this.reconnectionAttempts); // Exponential backoff
             }
 
             endCall() {
                 this.updateCallState('ended');
+                
+                // 🚨 IMMEDIATE AUDIO STOP ON HANGUP - TOP PRIORITY
+                console.log('🚨 HANGUP DETECTED - STOPPING ALL AUDIO IMMEDIATELY');
+                this.stopCurrentAudio();
+                this.stopBackgroundMusic();
+                
+                // 🚨 STOP OVERLAP DETECTION
+                this.stopOverlapDetection();
+                console.log('🚨 Overlap detection stopped for ended call');
+                
+                // 🎯 CLEAR AUDIO BUFFER
+                if (this.audioBuffer.length > 0) {
+                    console.log(`🎵 Clearing ${this.audioBuffer.length} buffered audio chunks on call end`);
+                    this.audioBuffer = [];
+                    this.bufferStartTime = 0;
+                }
                 
                 // Hide process status and audio visualizer
                 this.hideProcessStatus();
@@ -1700,7 +2739,7 @@
             }
             
             startHeartbeat() {
-                // Send ping every 10 seconds to keep connection alive
+                // Enhanced aggressive heartbeat with connection monitoring
                 this.heartbeatInterval = setInterval(() => {
                     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                         this.websocket.send(JSON.stringify({
@@ -1708,14 +2747,30 @@
                             session_id: this.currentSessionId,
                             timestamp: Date.now()
                         }));
+                        console.log('💓 Client heartbeat sent');
+                    } else if (this.websocket) {
+                        console.log('🚨 WebSocket not open during heartbeat, state:', this.websocket.readyState);
+                        this.handleWebSocketReconnection();
                     }
-                }, 10000); // 10 second intervals
+                }, 3000); // Aggressive 3-second heartbeat
+                
+                // Additional connection monitor for critical operations
+                this.connectionMonitor = setInterval(() => {
+                    if (this.websocket && this.websocket.readyState !== WebSocket.OPEN) {
+                        console.log('⚠️ Connection monitor detected disconnection, attempting recovery...');
+                        this.handleWebSocketReconnection();
+                    }
+                }, 1000); // Check every 1 second during active calls
             }
             
             stopHeartbeat() {
                 if (this.heartbeatInterval) {
                     clearInterval(this.heartbeatInterval);
                     this.heartbeatInterval = null;
+                }
+                if (this.connectionMonitor) {
+                    clearInterval(this.connectionMonitor);
+                    this.connectionMonitor = null;
                 }
             }
 
@@ -1764,6 +2819,33 @@
                 localStorage.setItem('callHistory', JSON.stringify(history));
                 
                 this.updateCallHistoryDisplay();
+            }
+
+            // 🚨 EMERGENCY: Toggle noise gate on/off
+            toggleNoiseGate() {
+                this.noiseGate.bypassMode = !this.noiseGate.bypassMode;
+                this.noiseGate.enabled = !this.noiseGate.bypassMode;
+                this.noiseGate.isRecordingValid = this.noiseGate.bypassMode;
+                
+                // Update button appearance
+                if (this.noiseGate.bypassMode) {
+                    this.noiseGateButton.style.background = '#dc3545'; // Red - bypassed
+                    this.noiseGateButton.textContent = '🔇';
+                    this.noiseGateButton.title = 'Noise Gate: BYPASSED (click to enable)';
+                    this.addMessage('system', '🚨 <span style="color: red;">Noise Gate BYPASSED</span> - All audio will be processed');
+                } else {
+                    this.noiseGateButton.style.background = '#28a745'; // Green - active
+                    this.noiseGateButton.textContent = '🔊';
+                    this.noiseGateButton.title = 'Noise Gate: ACTIVE (click to bypass)';
+                    this.addMessage('system', '🔊 <span style="color: green;">Noise Gate ACTIVE</span> - Background noise will be filtered');
+                    
+                    // Reset calibration when enabling
+                    this.noiseGate.calibrated = false;
+                    this.noiseGate.calibrationSamples = [];
+                    this.noiseGate.isRecordingValid = false;
+                }
+                
+                console.log(`🔊 Noise gate toggled: ${this.noiseGate.bypassMode ? 'BYPASSED' : 'ACTIVE'}`);
             }
 
             updateCallHistoryDisplay() {

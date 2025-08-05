@@ -167,19 +167,14 @@ class DualEnvironmentTTSService:
     ) -> Dict[str, Any]:
         """
         Synthesize speech and return API-formatted response.
-        Supports both fast and high-quality TTS modes.
+        Now uses our British accent subprocess for all modes!
         """
         start_time = time.time()
         
         try:
-            if tts_mode == "fast":
-                # Use fast FFmpeg-based TTS for quick responses
-                logger.info("🚀 Using Fast TTS (Windows SAPI)")
-                audio_data, content_type = await self._fast_ffmpeg_tts(text, speed)
-            else:
-                # Use high-quality Coqui TTS for premium voices
-                logger.info("🎭 Using High-Quality TTS (Coqui Neural)")
-                audio_data, content_type = await self.synthesize_speech(text, language, voice, speed)
+            # Always use our British accent subprocess (with Edge TTS + emoji cleaning)
+            logger.info("�🇧 Using British Accent TTS Subprocess (Edge TTS + Emoji Cleaning)")
+            audio_data, content_type = await self.synthesize_speech(text, language, voice, speed)
             
             # Encode audio as base64 for API response
             audio_base64 = base64.b64encode(audio_data).decode('utf-8')
@@ -350,15 +345,13 @@ class DualEnvironmentTTSService:
             }
         
         try:
-            # Test basic TTS functionality
-            test_result = await self.synthesize_speech("Test", "en")
-            
+            # Skip heavy TTS test for health check - just return environment status
             return {
                 "status": "healthy",
                 "tts_environment": True,
                 "python_version": "3.12 (subprocess)",
-                "test_synthesis": "passed",
-                "audio_size": len(test_result[0]) if test_result else 0
+                "test_synthesis": "skipped_for_performance",
+                "audio_size": 0
             }
             
         except Exception as e:

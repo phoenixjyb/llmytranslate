@@ -43,7 +43,7 @@ class OptimizedLLMService:
             #     "context_window": 2048,
             #     "estimated_speed": "very_fast"  # <2s typical
             # },
-            "phi3-mini": {
+            "phi3:mini": {
                 "max_tokens": 120,
                 "temperature": 0.6,
                 "top_p": 0.8,
@@ -110,8 +110,8 @@ class OptimizedLLMService:
             return "gemma3:latest"
         elif self.is_model_available("llama3.1:8b"):
             return "llama3.1:8b"
-        elif self.is_model_available("phi3-mini"):
-            return "phi3-mini"
+        elif self.is_model_available("gemma2:2b"):
+            return "gemma2:2b"
         elif self.is_model_available("llama3.2:1b"):
             return "llama3.2:1b"
             return "llama3.2:1b"
@@ -354,7 +354,7 @@ class OptimizedLLMService:
         logger.info("Warming up models for phone calls...")
         warmup_results = {}
         
-        for model_name in ["phi3-mini", "gemma2:2b", "llama3.2:1b"]:
+        for model_name in ["gemma2:2b", "llama3.2:1b"]:
             try:
                 # Send a simple warmup request
                 result = await self.fast_completion(

@@ -146,7 +146,7 @@ async def handle_android_session_start(websocket: WebSocket, message: Dict) -> s
         "server_info": {
             "version": "android_optimized",
             "features": ["native_stt", "native_tts", "text_only", "fast_llm"],
-            "models_available": ["gemma2:2b", "gemma3:1b", "phi3-mini"]
+            "models_available": ["gemma2:2b"]
         },
         "settings": session.settings
     })
@@ -379,7 +379,7 @@ async def android_service_discovery():
             "native_stt_supported": True,
             "native_tts_supported": True
         },
-        "models": ["gemma2:2b", "gemma3:1b", "phi3-mini"],
+        "models": ["gemma2:2b"],
         "languages": ["en-US", "zh-CN", "es-ES", "fr-FR", "de-DE"]
     }
 
