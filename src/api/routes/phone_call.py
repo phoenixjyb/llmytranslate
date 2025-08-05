@@ -34,6 +34,9 @@ from ...services.connection_pool_manager import connection_pool_manager
 from ...services.conversation_flow_manager import conversation_flow_manager
 from ...services.ollama_client import ollama_client
 
+# Import WebSocket utilities
+from ...utils.websocket_utils import safe_websocket_send
+
 # Phase 4: Service client aliases for optimization handlers
 stt_client = stt_service
 tts_client = tts_service
@@ -180,12 +183,24 @@ async def maintain_aggressive_heartbeat(websocket: WebSocket, session_id: str):
     try:
         heartbeat_count = 0
         while heartbeat_count < 30:  # Max 30 heartbeats (60 seconds)
+            # 🔧 CRITICAL FIX: Check connection BEFORE any operations
+            if (not websocket or 
+                not hasattr(websocket, 'client_state') or 
+                websocket.client_state != WebSocketState.CONNECTED):
+                print(f"💔 WebSocket disconnected before heartbeat {heartbeat_count + 1} for {session_id}")
+                break
+                
             await asyncio.sleep(2)  # Very aggressive 2-second heartbeat
             heartbeat_count += 1
             
             # Check if WebSocket is still connected
             try:
-                if websocket.client_state == WebSocketState.CONNECTED:
+                # More robust connection check
+                if (websocket and 
+                    hasattr(websocket, 'client_state') and 
+                    websocket.client_state == WebSocketState.CONNECTED):
+                    
+                    # Additional check: try a simple send operation
                     await safe_websocket_send(websocket, {
                         "type": "heartbeat",
                         "session_id": session_id,
@@ -196,60 +211,47 @@ async def maintain_aggressive_heartbeat(websocket: WebSocket, session_id: str):
                 else:
                     print(f"💔 WebSocket disconnected, stopping heartbeat for {session_id}")
                     break
+                    
             except Exception as check_error:
                 print(f"💔 Heartbeat check failed: {check_error}")
+                # If we can't send heartbeat, connection is likely dead
                 break
                 
     except asyncio.CancelledError:
         print(f"💓 Heartbeat cancelled for session {session_id}")
+        raise  # Re-raise to properly handle cancellation
     except Exception as e:
         print(f"💔 Heartbeat task ended: {e}")
         logger.warning(f"Heartbeat task ended: {e}")
 
-# Process Status Helper Functions
-async def safe_websocket_send(websocket: WebSocket, data: dict):
-    """Safely send data via WebSocket, checking connection state first."""
-    try:
-        # For FastAPI WebSocket, we need to check if it's still connected differently
-        # The client_state property uses WebSocketState enum values
-        from fastapi.websockets import WebSocketState
-        
-        # More robust check - ensure websocket is not None and state is CONNECTED
-        if (websocket and 
-            hasattr(websocket, 'client_state') and 
-            websocket.client_state == WebSocketState.CONNECTED):
-            
-            # Enhanced logging for audio responses to track transmission
-            if data.get("type") == "ai_response" and "audio" in data:
-                audio_size = len(data["audio"]) if data["audio"] else 0
-                logger.info(f"🎵 Sending AI response with audio ({audio_size} bytes) for session {data.get('session_id')}")
-            
-            # Send the data
-            await websocket.send_text(json.dumps(data))
-            
-            # Verify the connection is still active after sending
-            if websocket.client_state == WebSocketState.CONNECTED:
-                if data.get("type") == "ai_response" and "audio" in data:
-                    logger.info(f"✅ Audio response transmitted successfully for session {data.get('session_id')}")
-                return True
-            else:
-                logger.error(f"⚠️ WebSocket disconnected immediately after sending for session {data.get('session_id')}")
-                return False
-                
-        else:
-            if websocket:
-                logger.warning(f"WebSocket not connected (state: {getattr(websocket, 'client_state', 'unknown')}), skipping send")
-            else:
-                logger.warning("WebSocket is None, skipping send")
-            return False
-    except Exception as e:
-        # Enhanced error logging for audio transmission failures
-        if data.get("type") == "ai_response" and "audio" in data:
-            logger.error(f"❌ CRITICAL: Failed to send audio response for session {data.get('session_id')}: {e}")
-        else:
-            logger.error(f"Failed to send WebSocket message: {e}")
-        return False
+# Global heartbeat task tracking
+heartbeat_tasks = {}
 
+async def start_heartbeat_task(websocket: WebSocket, session_id: str):
+    """Start heartbeat task and track it for proper cleanup."""
+    # Cancel any existing heartbeat task for this session
+    if session_id in heartbeat_tasks:
+        heartbeat_tasks[session_id].cancel()
+    
+    # Start new heartbeat task
+    task = asyncio.create_task(maintain_aggressive_heartbeat(websocket, session_id))
+    heartbeat_tasks[session_id] = task
+    return task
+
+async def stop_heartbeat_task(session_id: str):
+    """Stop and clean up heartbeat task for a session."""
+    if session_id in heartbeat_tasks:
+        task = heartbeat_tasks[session_id]
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass  # Expected when cancelling
+        del heartbeat_tasks[session_id]
+        print(f"🛑 Heartbeat task stopped for session {session_id}")
+
+# Process Status Helper Functions
 async def send_process_status(websocket: WebSocket, stage: str, status: str, details: str = ""):
     """Send process status update to the frontend."""
     await safe_websocket_send(websocket, {
@@ -682,6 +684,9 @@ async def phone_call_websocket(websocket: WebSocket):
             # Clean up conversation flow manager
             conversation_flow_manager.end_conversation(session_id)
             
+            # 🔧 CRITICAL FIX: Stop heartbeat task to prevent continued sending
+            await stop_heartbeat_task(session_id)
+            
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         
@@ -689,6 +694,9 @@ async def phone_call_websocket(websocket: WebSocket):
         if session_id:
             call_duration = time.time() - call_start_time
             performance_monitor.record_call_end(session_id, success=False)
+            
+            # 🔧 CRITICAL FIX: Stop heartbeat task on any error
+            await stop_heartbeat_task(session_id)
             
             # Clean up conversation flow manager on error
             conversation_flow_manager.end_conversation(session_id)
@@ -704,11 +712,15 @@ async def phone_call_websocket(websocket: WebSocket):
         except Exception as send_error:
             logger.warning(f"Failed to send error message: {send_error}")
     finally:
+        # 🔧 CRITICAL FIX: Ensure cleanup always happens, including heartbeat task
         if session_id:
+            # Stop heartbeat task to prevent any orphaned tasks
+            await stop_heartbeat_task(session_id)
+            
             phone_manager.end_session(session_id)
             # Clean up conversation flow management
             conversation_flow_manager.end_conversation(session_id)
-            logger.info(f"Cleaned up session {session_id}")
+            logger.info(f"🧹 Finally block: Cleaned up session {session_id} and stopped heartbeat tasks")
 
 # Phase 3 & 4: Helper function for interruptible LLM responses with optimization
 async def get_interruptible_llm_response(session: PhoneCallSession, user_text: str, 
@@ -958,13 +970,13 @@ async def handle_session_start(websocket: WebSocket, message: Dict):
         if settings.kid_friendly:
             logger.info(f"Kid-friendly mode enabled for session {session_id}")
         
-        await websocket.send_text(json.dumps({
+        await safe_websocket_send(websocket, {
             "type": "status",
             "message": "Phone call connected successfully",
             "session_id": session_id,
             "call_id": call_id,
             "kid_friendly_mode": settings.kid_friendly
-        }))
+        })
         
         # Send initial greeting if kid-friendly mode
         if settings.kid_friendly:
@@ -972,12 +984,12 @@ async def handle_session_start(websocket: WebSocket, message: Dict):
                 'chinese' if settings.language in ['zh', 'chinese'] else 'english'
             ]['greeting']
             
-            await websocket.send_text(json.dumps({
+            await safe_websocket_send(websocket, {
                 "type": "ai_message",
                 "message": greeting,
                 "session_id": session_id,
                 "timestamp": datetime.now().isoformat()
-            }))
+            })
         
         logger.info(f"Phone call session started: {session_id} (kid-friendly: {settings.kid_friendly})")
         
@@ -1926,11 +1938,22 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             await send_stage_error(websocket, "stt", error_msg)
             return
         
-        # Phase 4: Record STT performance
+        # Phase 4: Record STT performance with correct audio duration
+        # Get actual audio duration from STT analysis, fallback to byte-based estimation
+        audio_analysis = stt_result.get("audio_analysis", {})
+        actual_audio_duration = audio_analysis.get("duration_sec")
+        
+        if actual_audio_duration is None:
+            # Fallback: Estimate duration from bytes (assuming 16kHz 16-bit mono)
+            # WebM audio is typically 48kHz, but we'll use a conservative estimate
+            estimated_duration = len(audio_data) / (16000 * 2)  # 16kHz * 2 bytes per sample
+            logger.warning(f"🔧 No duration_sec in STT result, estimating: {estimated_duration:.2f}s from {len(audio_data)} bytes")
+            actual_audio_duration = estimated_duration
+            
         performance_monitor.record_stt_performance(
             session_id=session_id,
             duration=stt_duration,
-            audio_length=len(audio_data),
+            audio_length=actual_audio_duration,  # Use actual duration in seconds, not bytes!
             success=bool(user_text and user_text.strip())
         )
         
@@ -2122,7 +2145,7 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             
             # Enhanced: Start aggressive heartbeat during processing
             print("💓 Starting aggressive heartbeat task...")
-            heartbeat_task = asyncio.create_task(maintain_aggressive_heartbeat(websocket, session_id))
+            heartbeat_task = await start_heartbeat_task(websocket, session_id)
             
             # Phase 4: Get optimized LLM response with enhanced monitoring
             ai_text, llm_duration = await get_interruptible_llm_response(
@@ -2351,8 +2374,10 @@ async def handle_optimized_audio_data(websocket: WebSocket, message: Dict):
             "timestamp": time.time()
         })
         
+        # 🔧 ENHANCED: Don't fail if client has disconnected after receiving previous audio
+        # This is normal behavior - user may close connection after hearing the response
         if not preflight_success:
-            logger.error(f"❌ CRITICAL: Pre-flight test failed for session {session_id}")
+            logger.info(f"⚠️ Pre-flight test failed - client may have disconnected (normal for session {session_id})")
             phone_manager.active_ai_responses.discard(session_id)
             return
         
@@ -2536,22 +2561,22 @@ async def handle_optimized_session_end(websocket: WebSocket, message: Dict, call
         conversation_flow_manager.end_conversation(session_id)
         
         # Send comprehensive session summary
-        await websocket.send_text(json.dumps({
+        await safe_websocket_send(websocket, {
             "type": "session_ended",
             "session_id": session_id,
             "duration": call_duration,
             "performance_summary": session_summary,
             "message": "Phone call session ended successfully"
-        }))
+        })
         
         logger.info(f"Optimized session {session_id} ended after {call_duration:.2f}s")
         
     except Exception as e:
         logger.error(f"Error ending optimized session: {e}")
-        await websocket.send_text(json.dumps({
+        await safe_websocket_send(websocket, {
             "type": "error",
             "message": f"Error ending session: {str(e)}"
-        }))
+        })
 
 @router.post("/interrupt/{session_id}")
 async def interrupt_session(session_id: str):

@@ -11,6 +11,9 @@ import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 
+# Import safe WebSocket send function from utilities
+from ..utils.websocket_utils import safe_websocket_send
+
 logger = logging.getLogger(__name__)
 
 class IntelligentConversationManager:
@@ -286,14 +289,14 @@ class IntelligentConversationManager:
             if not conversation:
                 return
             
-            await conversation["websocket"].send_text(json.dumps({
+            await safe_websocket_send(conversation["websocket"], {
                 "type": "ai_response",
                 "text": text,
                 "audio_data": None,  # Will be synthesized
                 "timestamp": datetime.now().isoformat(),
                 "conversation_state": message_type,
                 "turn_count": conversation["conversation_turns"]
-            }))
+            })
             
             conversation["last_ai_response"] = time.time()
             conversation["ai_is_speaking"] = True
@@ -469,7 +472,7 @@ class IntelligentConversationManager:
         }
         
         try:
-            await websocket.send_text(json.dumps(interruption_message))
+            await safe_websocket_send(websocket, interruption_message)
             
             # Mark user as interrupted
             conversation["last_interruption"] = time.time()

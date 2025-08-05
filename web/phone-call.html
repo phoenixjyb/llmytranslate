@@ -733,6 +733,14 @@
                 <div class="websocket-status" id="websocketStatus" style="margin-top: 5px; font-size: 0.8rem;">
                     <span id="wsIndicator" style="color: #666;">🔴 Not connected</span>
                 </div>
+                
+                <!-- 🧪 DEBUG CONTROLS -->
+                <div class="debug-controls" style="margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 5px; font-size: 0.8rem;" id="debugControls">
+                    <div style="font-weight: bold; margin-bottom: 5px; color: #666;">🧪 Debug Controls</div>
+                    <button onclick="testAudioChunks()" class="btn btn-sm btn-secondary" style="margin-right: 5px; font-size: 0.7rem;">Test Audio Chunks</button>
+                    <button onclick="console.clear()" class="btn btn-sm btn-light" style="margin-right: 5px; font-size: 0.7rem;">Clear Console</button>
+                    <button onclick="showDebugInfo()" class="btn btn-sm btn-info" style="font-size: 0.7rem;">Show URLs</button>
+                </div>
             </div>
 
             <!-- Process Status Indicator -->
@@ -2353,6 +2361,17 @@
                     console.log(`🔍 DEBUG: Initialized audioChunks array`);
                 }
                 
+                // Validate chunk data
+                if (typeof data.chunk_index !== 'number' || typeof data.total_chunks !== 'number') {
+                    console.error(`❌ Invalid chunk data: chunk_index=${data.chunk_index}, total_chunks=${data.total_chunks}`);
+                    return;
+                }
+                
+                if (!data.audio_chunk) {
+                    console.error(`❌ No audio_chunk data in chunk ${data.chunk_index}`);
+                    return;
+                }
+                
                 // Store the chunk
                 this.audioChunks[data.chunk_index] = data.audio_chunk;
                 
@@ -2367,8 +2386,37 @@
                 if (receivedChunks === data.total_chunks) {
                     console.log(`🎵 All chunks received! Combining audio...`);
                     
+                    // Validate all chunks before combining
+                    const missingChunks = [];
+                    for (let i = 0; i < data.total_chunks; i++) {
+                        if (!this.audioChunks[i]) {
+                            missingChunks.push(i);
+                        }
+                    }
+                    
+                    if (missingChunks.length > 0) {
+                        console.error(`❌ Missing chunks: ${missingChunks.join(', ')}`);
+                        return;
+                    }
+                    
                     const completeAudio = this.audioChunks.join('');
                     console.log(`🎵 Complete audio assembled: ${completeAudio.length} chars`);
+                    
+                    // Validate the complete audio is valid base64
+                    try {
+                        const binaryData = atob(completeAudio);
+                        console.log(`✅ Audio base64 is valid: ${binaryData.length} bytes decoded`);
+                        
+                        // Check if it looks like audio data (basic validation)
+                        if (binaryData.length < 44) {
+                            console.warn(`⚠️ Audio data seems too small: ${binaryData.length} bytes`);
+                        }
+                        
+                    } catch (e) {
+                        console.error(`❌ Invalid base64 audio data: ${e.message}`);
+                        this.addMessage('system', '❌ <span style="color: red;">Invalid audio data received</span>');
+                        return;
+                    }
                     
                     // Play the complete audio
                     console.log(`🎵 Calling playAudioResponse...`);
@@ -2409,6 +2457,23 @@
                     
                     console.log(`🎵 DEBUG: Audio data validated, proceeding with playback...`);
                     
+                    // Validate base64 format
+                    if (typeof audioBase64 !== 'string') {
+                        console.error('❌ Audio data is not a string:', typeof audioBase64);
+                        this.addMessage('system', '❌ <span style="color: red;">Invalid audio data format</span>');
+                        return;
+                    }
+                    
+                    // Test base64 decoding
+                    try {
+                        const testDecode = atob(audioBase64.substring(0, Math.min(100, audioBase64.length)));
+                        console.log(`✅ Base64 validation passed, sample: ${testDecode.length} bytes`);
+                    } catch (e) {
+                        console.error('❌ Base64 decoding failed:', e.message);
+                        this.addMessage('system', '❌ <span style="color: red;">Invalid base64 audio data</span>');
+                        return;
+                    }
+                    
                     // 🚨 OVERLAP DETECTION: Check if audio is already playing
                     const now = Date.now();
                     const timeSinceLastAudio = now - this.lastAudioStartTime;
@@ -2428,10 +2493,16 @@
                     const audio = new Audio('data:audio/wav;base64,' + audioBase64);
                     audio.volume = 1.0; // Full volume for AI response
                     
-                    // 🚨 ENHANCED ERROR HANDLING
+                    // 🚨 ENHANCED ERROR HANDLING - Single error handler
                     audio.onerror = (error) => {
                         console.error('🚨 Audio playback error:', error);
-                        this.addMessage('system', '🚨 <span style="color: red;">Audio playback failed</span>');
+                        console.error('🚨 Audio error details:', {
+                            error: error,
+                            src: audio.src ? audio.src.substring(0, 100) + '...' : 'no src',
+                            networkState: audio.networkState,
+                            readyState: audio.readyState
+                        });
+                        this.addMessage('system', '🚨 <span style="color: red;">Audio playback failed - check browser console for details</span>');
                         this.activeAudioElements.delete(audio);
                     };
                     
@@ -2444,14 +2515,28 @@
                         this.addMessage('system', '🔊 <span style="color: blue;">AI audio ready</span>');
                     };
                     
+                    audio.onloadeddata = () => {
+                        console.log('📊 Audio data loaded:', {
+                            duration: audio.duration,
+                            networkState: audio.networkState,
+                            readyState: audio.readyState
+                        });
+                    };
+                    
                     // 🚨 OVERLAP PREVENTION: Track this audio element
                     this.activeAudioElements.add(audio);
                     this.lastAudioStartTime = now;
                     
                     audio.play().then(() => {
                         console.log('✅ Audio playback started successfully');
+                        this.addMessage('system', '🎵 <span style="color: green;">Audio playing...</span>');
                     }).catch(error => {
                         console.error('❌ Failed to play AI audio response:', error);
+                        console.error('❌ Play error details:', {
+                            name: error.name,
+                            message: error.message,
+                            code: error.code
+                        });
                         this.addMessage('system', '❌ <span style="color: red;">Audio playback failed - check browser permissions</span>');
                         this.activeAudioElements.delete(audio);
                     });
@@ -2472,19 +2557,65 @@
                         this.displayPerformanceSummary();
                     };
                     
-                    audio.onerror = () => {
-                        console.error('🚨 Audio playback error detected');
-                        this.endTiming('audioPlayback');
-                        this.endTiming('endToEnd');
-                        this.activeAudioElements.delete(audio);
-                        if (this.currentAudio === audio) {
-                            this.currentAudio = null;
-                        }
-                    };
-                    
                 } catch (error) {
                     console.error('Error creating audio element:', error);
                 }
+            }
+            
+            // DEBUG: Test audio chunk functionality
+            testAudioChunks() {
+                console.log('🧪 Starting audio chunk test...');
+                
+                // Simulate receiving audio chunks
+                const testChunks = [
+                    'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=', // Basic WAV header
+                    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==', // Silent audio data
+                    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==' // More silent audio data
+                ];
+                
+                // Reset chunks array
+                this.audioChunks = [];
+                
+                // Simulate chunk delivery
+                testChunks.forEach((chunk, index) => {
+                    setTimeout(() => {
+                        const chunkData = {
+                            type: 'audio_chunk',
+                            chunk_index: index,
+                            total_chunks: testChunks.length,
+                            audio_chunk: chunk,
+                            text: 'Test audio response'
+                        };
+                        
+                        console.log(`🧪 Simulating chunk ${index + 1}/${testChunks.length}`);
+                        this.handleAudioChunk(chunkData);
+                    }, index * 500); // Delay each chunk by 500ms
+                });
+            }
+            
+            // DEBUG: Show debugging information
+            showDebugInfo() {
+                const currentUrl = window.location.href;
+                const wsUrl = currentUrl.replace('http', 'ws').replace('https', 'wss').replace('/web/phone-call.html', '/api/phone/stream');
+                
+                console.log('🔍 DEBUGGING INFORMATION:');
+                console.log('📱 Current URL:', currentUrl);
+                console.log('🔌 WebSocket URL:', wsUrl);
+                console.log('🌐 Protocol:', window.location.protocol);
+                console.log('🏠 Host:', window.location.host);
+                console.log('');
+                console.log('🧪 Available debug functions:');
+                console.log('  testAudioChunks() - Test chunked audio delivery');
+                console.log('  console.clear()   - Clear console');
+                console.log('  window.phoneCallManager - Access manager object');
+                
+                // Show current state
+                if (this.websocket) {
+                    console.log('🔌 WebSocket state:', this.websocket.readyState);
+                    console.log('   0 = CONNECTING, 1 = OPEN, 2 = CLOSING, 3 = CLOSED');
+                }
+                
+                alert('Debug info logged to console! Open Developer Tools (F12) → Console tab');
             }
 
             playBackgroundMusic(audioBase64, volume = 0.3) {
@@ -2878,6 +3009,13 @@
             const phoneInterface = new PhoneCallInterface();
             phoneInterface.loadSettings();
             phoneInterface.updateCallHistoryDisplay();
+            
+            // DEBUG: Expose test function globally
+            window.testAudioChunks = () => phoneInterface.testAudioChunks();
+            window.showDebugInfo = () => phoneInterface.showDebugInfo();
+            console.log('🧪 DEBUG: Debug functions available:');
+            console.log('  testAudioChunks() - Test chunked audio delivery');
+            console.log('  showDebugInfo()   - Show debug information');
         });
     </script>
 </body>
