@@ -106,7 +106,7 @@ async def send_chat_message(
             user_id=current_session.user_id if not current_session.is_guest else None,
             session_id=current_session.session_id,
             title=f"Chat {conversation_id[:8]}",
-            model=request.model or "gemma3:latest",
+            model=request.model or "gemma2:2b",
             platform=request.platform or "web"
         )
         
@@ -382,7 +382,7 @@ async def get_storage_info():
 
 @router.post("/conversations/new")
 async def create_new_conversation(
-    model: str = Query(default="gemma2:latest", description="LLM model to use for this conversation"),
+    model: str = Query(default="gemma2:2b", description="LLM model to use for this conversation"),
     title: Optional[str] = Query(default=None, description="Optional conversation title")
 ):
     """

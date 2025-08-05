@@ -42,7 +42,7 @@ class OllamaSettings(BaseSettings):
         description="Ollama server host"
     )
     model_name: str = Field(
-        default="gemma3:latest",
+        default="gemma2:2b",
         description="Default LLM model name"
     )
     

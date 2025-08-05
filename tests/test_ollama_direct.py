@@ -9,7 +9,7 @@ import requests
 import json
 from typing import Dict, Optional
 
-def test_ollama_translation(text: str, from_lang: str = "en", to_lang: str = "zh", model: str = "gemma3:latest") -> Dict:
+def test_ollama_translation(text: str, from_lang: str = "en", to_lang: str = "zh", model: str = "gemma2:2b") -> Dict:
     """Test Ollama translation directly with timing breakdown."""
     
     print(f"🔄 Testing Ollama translation: {from_lang} → {to_lang}")

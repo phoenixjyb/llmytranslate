@@ -75,7 +75,7 @@ class ProductionConfig(BaseSettings):
     cache_max_size: int = Field(default=1000, description="Max cache entries")
     
     # Translation service settings
-    default_model: str = Field(default="gemma3:latest", description="Default Ollama model")
+    default_model: str = Field(default="gemma2:2b", description="Default Ollama model")
     model_timeout: int = Field(default=120, description="Model request timeout")
     max_tokens: int = Field(default=4096, description="Max tokens per request")
     
@@ -223,7 +223,7 @@ CACHE_TTL=3600
 CACHE_MAX_SIZE=1000
 
 # Translation Service
-DEFAULT_MODEL=gemma3:latest
+DEFAULT_MODEL=gemma2:2b
 MODEL_TIMEOUT=120
 MAX_TOKENS=4096
 

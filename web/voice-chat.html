@@ -351,7 +351,7 @@
                 <div class="control-group">
                     <label class="control-label" for="modelSelect">AI Model:</label>
                     <select class="control-input" id="modelSelect">
-                        <option value="gemma3:latest" selected>Gemma 3 (Default)</option>
+                        <option value="gemma2:2b" selected>Gemma 2 2B (Default - Fast)</option>
                         <option value="llama3.1:8b">Llama 3.1 8B</option>
                         <option value="gemma3:latest">Gemma 3 Latest</option>
                         <option value="llava:latest">Llava Latest</option>
@@ -757,7 +757,7 @@
                     },
                     body: JSON.stringify({
                         message: message,
-                        model: document.getElementById('modelSelect').value || 'gemma3:latest'
+                        model: document.getElementById('modelSelect').value || 'gemma2:2b'
                     })
                 });
                 

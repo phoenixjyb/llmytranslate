@@ -192,7 +192,7 @@ class ProgressTracker {
 class ChatBot {
     constructor() {
         this.conversationId = this.generateConversationId();
-        this.currentModel = 'gemma3:latest';
+        this.currentModel = 'gemma2:2b';
         this.isConnected = false;
         this.userAuth = null;
         this.currentUser = null;
