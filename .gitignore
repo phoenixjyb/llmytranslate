@@ -20,7 +20,7 @@ android/**/*.apk
 !llmytranslate-android-*.apk
 
 # Generated files
-android/app/src/main/res/
+# android/app/src/main/res/ - Now tracked for cross-platform builds
 *.no-kapt
 
 # Test files and temporary data
