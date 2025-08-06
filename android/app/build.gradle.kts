@@ -47,6 +47,10 @@ android {
         jvmTarget = "1.8"
     }
     
+    buildFeatures {
+        compose = true
+    }
+    
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.4"
     }
@@ -54,18 +58,6 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
-}
-
-// Configure KSP for Hilt
-kotlin {
-    sourceSets {
-        debug {
-            kotlin.srcDir("build/generated/ksp/debug/kotlin")
-        }
-        release {
-            kotlin.srcDir("build/generated/ksp/release/kotlin")
         }
     }
 }
