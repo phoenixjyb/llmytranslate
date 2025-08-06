@@ -1,5 +1,6 @@
 package com.llmytranslate.android.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmytranslate.android.models.*
@@ -8,20 +9,18 @@ import com.llmytranslate.android.services.TTSService
 import com.llmytranslate.android.services.WebSocketService
 import com.llmytranslate.android.utils.NetworkManager
 import com.llmytranslate.android.utils.ServerDiscoveryResult
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 /**
  * MainViewModel manages the overall application state and coordinates services.
  */
-@HiltViewModel
-class MainViewModel @Inject constructor(
-    private val networkManager: NetworkManager,
-    private val sttService: STTService,
-    private val ttsService: TTSService
-) : ViewModel() {
+class MainViewModel(private val context: Context) : ViewModel() {
+    
+    // Initialize services
+    private val networkManager = NetworkManager(context)
+    private val sttService = STTService(context)
+    private val ttsService = TTSService(context)
     
     // Application state
     private val _uiState = MutableStateFlow(MainUiState())
@@ -51,8 +50,7 @@ class MainViewModel @Inject constructor(
             // Initialize STT service
             sttService.initialize()
             
-            // Initialize TTS service
-            ttsService.initialize()
+            // TTSService initializes automatically in constructor
             
             _uiState.value = _uiState.value.copy(isInitialized = true)
         }
@@ -184,8 +182,8 @@ class MainViewModel @Inject constructor(
         return TTSCapabilities(
             isAvailable = ttsService.isInitializedState.value,
             supportsOffline = true, // Android TTS is always offline
-            supportsSamsungNeural = ttsService.supportsSamsungNeural(),
-            availableLanguages = ttsService.getSupportedLanguages(),
+            supportsSamsungNeural = false, // Simplified for now
+            availableLanguages = ttsService.getAvailableLanguages()?.map { it.toString() } ?: emptyList(),
             supportsSSML = true
         )
     }
@@ -193,8 +191,8 @@ class MainViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         webSocketService?.disconnect()
-        sttService.destroy()
-        ttsService.destroy()
+        sttService.stopListening()
+        ttsService.cleanup()
     }
 }
 

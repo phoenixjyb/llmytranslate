@@ -1,23 +1,22 @@
 package com.llmytranslate.android.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmytranslate.android.models.*
 import com.llmytranslate.android.services.WebSocketService
 import com.llmytranslate.android.utils.NetworkManager
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
-import javax.inject.Inject
 
 /**
  * ChatViewModel handles text-based chat functionality.
  */
-@HiltViewModel
-class ChatViewModel @Inject constructor(
-    private val networkManager: NetworkManager
-) : ViewModel() {
+class ChatViewModel(private val context: Context) : ViewModel() {
+    
+    // Initialize services
+    private val networkManager = NetworkManager(context)
     
     // UI state
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -73,11 +72,11 @@ class ChatViewModel @Inject constructor(
         
         // Add user message to UI immediately
         val userMessage = Message(
-            id = System.currentTimeMillis(),
+            id = System.currentTimeMillis().toString(),
             sessionId = getCurrentSessionId(),
-            content = text,
-            isFromUser = true,
-            timestamp = Date()
+            text = text,
+            isUser = true,
+            timestamp = System.currentTimeMillis()
         )
         
         messages.add(userMessage)
@@ -147,11 +146,11 @@ class ChatViewModel @Inject constructor(
             "ai_response" -> {
                 message.text?.let { aiText ->
                     val aiMessage = Message(
-                        id = System.currentTimeMillis(),
+                        id = System.currentTimeMillis().toString(),
                         sessionId = getCurrentSessionId(),
-                        content = aiText,
-                        isFromUser = false,
-                        timestamp = Date(),
+                        text = aiText,
+                        isUser = false,
+                        timestamp = System.currentTimeMillis(),
                         processingTime = message.timing?.totalProcessing
                     )
                     
@@ -181,11 +180,11 @@ class ChatViewModel @Inject constructor(
                 
                 // Add welcome message
                 val welcomeMessage = Message(
-                    id = System.currentTimeMillis(),
+                    id = System.currentTimeMillis().toString(),
                     sessionId = getCurrentSessionId(),
-                    content = "Connected to LLMyTranslate! You can now chat with AI using your Samsung S24 Ultra.",
-                    isFromUser = false,
-                    timestamp = Date()
+                    text = "Connected to LLMyTranslate! You can now chat with AI using your Samsung S24 Ultra.",
+                    isUser = false,
+                    timestamp = System.currentTimeMillis()
                 )
                 
                 messages.add(welcomeMessage)
