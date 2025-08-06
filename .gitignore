@@ -12,8 +12,12 @@ data/
 android/.gradle/
 android/build/
 android/app/build/
-*.apk
+# Ignore APK files in build directories, but allow distribution APKs in root
+android/**/*.apk
 *.aab
+
+# Allow distribution APKs in project root
+!llmytranslate-android-*.apk
 
 # Generated files
 android/app/src/main/res/
