@@ -1,0 +1,52 @@
+package com.llmytranslate.android.ui.chat
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+
+/**
+ * Simplified chat screen to resolve compilation issues.
+ */
+@Composable
+fun SimpleChatScreen(
+    onNavigateToVoice: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {}
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "LLMyTranslate Chat",
+            style = MaterialTheme.typography.headlineMedium
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "Chat functionality will be implemented here.",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        
+        Spacer(modifier = Modifier.weight(1f))
+        
+        Button(
+            onClick = onNavigateToVoice,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Voice Mode")
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Button(
+            onClick = onNavigateToSettings,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Settings")
+        }
+    }
+}

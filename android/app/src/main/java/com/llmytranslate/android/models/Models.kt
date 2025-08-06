@@ -10,6 +10,9 @@ import java.util.Date
  * Data models for LLMyTranslate Android app.
  */
 
+// Type aliases for UI components
+typealias ChatMessage = Message
+
 @JsonClass(generateAdapter = true)
 data class ServerInfo(
     @Json(name = "service_name") val serviceName: String,
@@ -33,13 +36,30 @@ data class ServerCapabilities(
 
 @Entity(tableName = "messages")
 data class Message(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
-    val sessionId: String,
-    val content: String,
-    val isFromUser: Boolean,
-    val timestamp: Date,
+    @PrimaryKey
+    val id: String,
+    val text: String,
+    val isUser: Boolean,
+    val timestamp: Long,
+    val isSystem: Boolean = false,
+    val sessionId: String = "",
     val processingTime: Float? = null
+)
+
+// Add STT-specific models
+data class STTResult(
+    val text: String,
+    val confidence: Float = 0f,
+    val isPartial: Boolean = false,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+// Add TTS-specific models
+data class VoiceInfo(
+    val name: String,
+    val locale: String,
+    val isNetworkConnectionRequired: Boolean = false,
+    val features: Set<String> = emptySet()
 )
 
 @Entity(tableName = "chat_sessions")
@@ -152,4 +172,12 @@ data class MainUiState(
     val serverInfo: ServerInfo? = null,
     val currentSessionId: String? = null,
     val isInitialized: Boolean = false
+)
+
+// Network status model
+data class NetworkStatus(
+    val isConnected: Boolean = false,
+    val isWiFi: Boolean = false,
+    val hasInternet: Boolean = false,
+    val wifiName: String? = null
 )

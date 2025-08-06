@@ -15,7 +15,6 @@ import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import java.net.URI
 import java.util.*
-import javax.inject.Inject
 
 /**
  * WebSocketService manages real-time communication with LLMyTranslate server.
@@ -29,8 +28,7 @@ class WebSocketService : Service() {
         private const val MAX_RECONNECT_ATTEMPTS = 5
     }
     
-    @Inject
-    lateinit var moshi: Moshi
+    private val moshi = Moshi.Builder().build()
     
     private val binder = WebSocketBinder()
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())

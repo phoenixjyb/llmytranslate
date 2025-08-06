@@ -12,13 +12,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.rememberNavController
 import com.llmytranslate.android.ui.navigation.AppNavigation
 import com.llmytranslate.android.ui.theme.LLMyTranslateTheme
-import dagger.hilt.android.AndroidEntryPoint
 
 /**
  * Main Activity for LLMyTranslate Android app.
  * Uses Jetpack Compose for modern UI with Material Design 3.
  */
-@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -1,5 +1,6 @@
 package com.llmytranslate.android.services
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -10,25 +11,24 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import javax.inject.Inject
-import javax.inject.Singleton
+import com.llmytranslate.android.models.STTResult
 
 /**
  * STTService handles native Android speech recognition.
- * Optimized for Samsung S24 Ultra with on-device recognition.
+ * Optimized for Samsung S24 Ultra with hardware acceleration and on-device processing.
  */
-@Singleton
-class STTService @Inject constructor(
-    private val context: Context
-) {
+class STTService(private val context: Context) {
     
     companion object {
         private const val TAG = "STTService"
+        private const val SAMSUNG_STT_PACKAGE = "com.samsung.android.svoiceime"
+        private const val GOOGLE_STT_PACKAGE = "com.google.android.googlequicksearchbox"
     }
     
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListening = false
     private var currentLanguage = "en-US"
+    private var isSamsungSTTAvailable = false
     
     // State flows for UI updates
     private val _isListening = MutableStateFlow(false)
@@ -43,8 +43,11 @@ class STTService @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     
+    private val _confidence = MutableStateFlow<Float>(0f)
+    val confidence: StateFlow<Float> = _confidence.asStateFlow()
+    
     /**
-     * Initialize speech recognizer.
+     * Initialize speech recognizer with Samsung optimization.
      */
     fun initialize() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -53,14 +56,39 @@ class STTService @Inject constructor(
             return
         }
         
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
-        speechRecognizer?.setRecognitionListener(recognitionListener)
+        // Check for Samsung STT availability
+        isSamsungSTTAvailable = checkSamsungSTTAvailability()
         
-        Log.i(TAG, "STT Service initialized")
+        // Create speech recognizer with optimal engine
+        speechRecognizer = if (isSamsungSTTAvailable) {
+            Log.i(TAG, "Using Samsung STT for hardware acceleration")
+            SpeechRecognizer.createSpeechRecognizer(context, ComponentName(SAMSUNG_STT_PACKAGE, ""))
+        } else {
+            Log.i(TAG, "Using Google STT as fallback")
+            SpeechRecognizer.createSpeechRecognizer(context)
+        }
+        
+        speechRecognizer?.setRecognitionListener(recognitionListener)
+        Log.i(TAG, "STT Service initialized with ${if (isSamsungSTTAvailable) "Samsung" else "Google"} engine")
     }
     
     /**
-     * Start listening for speech input.
+     * Check if Samsung STT is available for hardware acceleration.
+     */
+    private fun checkSamsungSTTAvailability(): Boolean {
+        return try {
+            val packageManager = context.packageManager
+            packageManager.getPackageInfo(SAMSUNG_STT_PACKAGE, 0)
+            Log.i(TAG, "Samsung STT package found - hardware acceleration available")
+            true
+        } catch (e: Exception) {
+            Log.i(TAG, "Samsung STT not available, using standard Android STT")
+            false
+        }
+    }
+    
+    /**
+     * Start listening for speech input with Samsung optimizations.
      */
     fun startListening(language: String = "en-US", continuous: Boolean = false) {
         if (isListening) {
@@ -81,12 +109,30 @@ class STTService @Inject constructor(
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             
+            // Samsung S24 Ultra optimizations
+            if (isSamsungSTTAvailable) {
+                // Enable on-device processing for faster response
+                putExtra("samsung.stt.ondevice", true)
+                // Enable noise cancellation using hardware
+                putExtra("samsung.stt.noise_cancellation", true)
+                // Use hardware-accelerated VAD (Voice Activity Detection)
+                putExtra("samsung.stt.vad_enabled", true)
+                // Enable real-time partial results for better UX
+                putExtra("samsung.stt.realtime_partial", true)
+            }
+            
+            // Standard Android optimizations
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500)
+            
             // Samsung S24 Ultra specific optimizations
             putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf(language))
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // Use on-device recognition
             
+            // Continuous listening for conversation mode
             if (continuous) {
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
             }
         }
@@ -234,8 +280,7 @@ class STTService @Inject constructor(
                     _finalResults.value = STTResult(
                         text = bestMatch,
                         confidence = bestConfidence,
-                        language = currentLanguage,
-                        isFinal = true
+                        isPartial = false
                     )
                     
                     _partialResults.value = ""
@@ -262,14 +307,3 @@ class STTService @Inject constructor(
         }
     }
 }
-
-/**
- * Speech-to-text result data class.
- */
-data class STTResult(
-    val text: String,
-    val confidence: Float,
-    val language: String,
-    val isFinal: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
-)

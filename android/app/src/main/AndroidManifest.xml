@@ -16,9 +16,15 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     
-    <!-- Optional: For direct Termux integration (future feature) -->
+    <!-- Termux integration -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
+    
+    <!-- Samsung TTS/STT optimization -->
+    <uses-permission android:name="android.permission.BIND_TEXT_TO_SPEECH_SERVICE" />
+    <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT" 
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".LLMyTranslateApplication"

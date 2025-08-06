@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.llmytranslate.android.ui.chat.ChatScreen
+import com.llmytranslate.android.ui.chat.PlaceholderChatScreen
 import com.llmytranslate.android.ui.voice.VoiceCallScreen
 import com.llmytranslate.android.ui.settings.SettingsScreen
 
@@ -20,7 +20,7 @@ fun AppNavigation(
         startDestination = "chat"
     ) {
         composable("chat") {
-            ChatScreen(
+            PlaceholderChatScreen(
                 onNavigateToVoice = {
                     navController.navigate("voice")
                 },

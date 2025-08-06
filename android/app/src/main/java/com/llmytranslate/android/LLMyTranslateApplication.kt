@@ -5,7 +5,6 @@ import dagger.hilt.android.HiltAndroidApp
 
 /**
  * Main Application class for LLMyTranslate Android app.
- * Configured with Hilt for dependency injection.
  */
 @HiltAndroidApp
 class LLMyTranslateApplication : Application() {

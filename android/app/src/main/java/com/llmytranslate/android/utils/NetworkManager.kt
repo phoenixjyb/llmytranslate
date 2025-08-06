@@ -8,24 +8,28 @@ import android.util.Log
 import com.llmytranslate.android.models.ServerInfo
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * NetworkManager handles server discovery and network utilities.
  * Automatically discovers LLMyTranslate servers on the local network.
  */
-@Singleton
-class NetworkManager @Inject constructor(
-    private val context: Context,
-    private val httpClient: OkHttpClient,
-    private val moshi: Moshi
-) {
+class NetworkManager(private val context: Context) {
+    
+    // Initialize HTTP client and JSON parser
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
+    
+    private val moshi = Moshi.Builder().build()
     
     companion object {
         private const val TAG = "NetworkManager"
@@ -54,11 +58,13 @@ class NetworkManager @Inject constructor(
             
             // Scan each IP in the range
             localIpRange.chunked(MAX_CONCURRENT_SCANS).forEach { ipChunk ->
-                val scanResults = ipChunk.map { ip ->
-                    kotlinx.coroutines.async {
-                        scanHostForLLMyTranslate(ip)
-                    }
-                }.map { it.await() }
+                val scanResults = coroutineScope {
+                    ipChunk.map { ip ->
+                        async {
+                            scanHostForLLMyTranslate(ip)
+                        }
+                    }.awaitAll()
+                }
                 
                 results.addAll(scanResults.filterNotNull())
             }
