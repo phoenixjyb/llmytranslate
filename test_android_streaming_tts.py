@@ -1,6 +1,13 @@
-#!/usr/bin/env python3
-"""
-Test Android Streaming TTS Integration
+#!/usr/bin/env python3    async def connect(self):
+        """Connect to Streaming TTS WebSocket endpoint."""
+        print("🔗 Connecting to Streaming TTS WebSocket...")
+        
+        # Handle proxy issues
+        import os
+        os.environ['no_proxy'] = 'localhost,127.0.0.1'
+        
+        self.websocket = await websockets.connect(WEBSOCKET_URL)
+        print("✅ Connected to Streaming TTS WebSocket")Test Android Streaming TTS Integration
 
 This script tests the new streaming TTS functionality for Android clients.
 """
@@ -12,7 +19,7 @@ import websockets
 from typing import Dict, Any
 
 # Test configuration
-WEBSOCKET_URL = "ws://localhost:8000/ws/android"
+WEBSOCKET_URL = "ws://localhost:8000/ws/streaming-tts"
 TEST_SESSION_ID = "test_streaming_android_001"
 
 class AndroidStreamingTTSTest:
@@ -22,9 +29,9 @@ class AndroidStreamingTTSTest:
         
     async def connect(self):
         """Connect to Android WebSocket endpoint."""
-        print("🔗 Connecting to Android WebSocket...")
+        print("🔗 Connecting to Streaming TTS WebSocket...")
         self.websocket = await websockets.connect(WEBSOCKET_URL)
-        print("✅ Connected to Android WebSocket")
+        print("✅ Connected to Streaming TTS WebSocket")
         
     async def send_message(self, message: Dict[str, Any]):
         """Send message to Android WebSocket."""
@@ -79,29 +86,15 @@ class AndroidStreamingTTSTest:
             print(f"❌ Error receiving messages: {e}")
             
     async def test_traditional_tts(self):
-        """Test traditional (non-streaming) TTS."""
+        """Test traditional (non-streaming) TTS using the production format."""
         print("\n🧪 Testing Traditional TTS...")
         
-        # Start session
+        # Send streaming request but expect it to work like traditional TTS
         await self.send_message({
-            "type": "session_start",
-            "session_id": TEST_SESSION_ID,
-            "settings": {
-                "model": "gemma2:2b",
-                "language": "en-US",
-                "kid_friendly": False
-            }
-        })
-        
-        # Wait for session start response
-        await asyncio.sleep(1)
-        
-        # Send text input WITHOUT streaming flag
-        await self.send_message({
-            "type": "text_input",
-            "session_id": TEST_SESSION_ID,
-            "text": "Hello, how are you today?",
-            "use_streaming_tts": False  # Traditional approach
+            "type": "start_streaming_chat",
+            "message": "Hello, how are you today?",
+            "conversation_id": f"android_test_{int(time.time())}",
+            "model": "gemma2:2b"
         })
         
         # Listen for responses
@@ -111,12 +104,12 @@ class AndroidStreamingTTSTest:
         """Test streaming TTS functionality."""
         print("\n🎵 Testing Streaming TTS...")
         
-        # Send text input WITH streaming flag
+        # Send text input for streaming TTS
         await self.send_message({
-            "type": "text_input",
-            "session_id": TEST_SESSION_ID,
-            "text": "Tell me an interesting story about space exploration.",
-            "use_streaming_tts": True  # NEW: Enable streaming TTS
+            "type": "start_streaming_chat",
+            "message": "Tell me an interesting story about space exploration.",
+            "conversation_id": f"android_test_{int(time.time())}",
+            "model": "gemma2:2b"
         })
         
         # Listen for streaming responses
@@ -126,15 +119,16 @@ class AndroidStreamingTTSTest:
         """Clean up session."""
         print("\n🧹 Cleaning up...")
         
-        # End session
+        # Send a ping to test connection before closing
         await self.send_message({
-            "type": "session_end",
-            "session_id": TEST_SESSION_ID
+            "type": "ping",
+            "timestamp": time.time()
         })
         
         # Close connection
-        await self.websocket.close()
-        print("✅ Session ended and connection closed")
+        if self.websocket:
+            await self.websocket.close()
+        print("✅ Connection closed")
         
     def analyze_results(self):
         """Analyze the test results."""

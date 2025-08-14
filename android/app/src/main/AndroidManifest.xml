@@ -15,16 +15,10 @@
     <!-- Background processing -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     
-    <!-- Termux integration -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission" />
-    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
-    
-    <!-- Samsung TTS/STT optimization -->
+    <!-- Text-to-speech -->
     <uses-permission android:name="android.permission.BIND_TEXT_TO_SPEECH_SERVICE" />
-    <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT" 
-        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".LLMyTranslateApplication"

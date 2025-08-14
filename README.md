@@ -4,6 +4,55 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
 
 **🆕 Now with advanced performance optimizations: Connection pooling, smart caching, and 244,891x speedup on cached translations!**
 
+## 🧩 Clients
+
+- **Web Client**: Static HTML/JS app with streaming chat + TTS
+  - Entry points: `web/chat.html`, `web/index.html`
+  - Docs: [Web Client Docs](docs/web/README.md)
+- **Android App**: Native Kotlin/Compose app with on-device STT/TTS
+  - Project: `android/`
+  - Docs: [Android App Docs](android/README.md)
+
+## 📐 Architecture Docs
+
+- System Overview: `docs/architecture/SYSTEM_ARCHITECTURE.md`
+- Software Design: `docs/architecture/SOFTWARE_DESIGN_DOCUMENT.md`
+- Data Flows: `docs/architecture/DATA_FLOW_DIAGRAM.md`
+- Software Stack Flowcharts: `docs/architecture/SOFTWARE_STACK_FLOWCHART.md`
+
+## ⚡ Performance Optimizations
+
+- **🔗 Connection Pooling**: Persistent HTTP connections with keep-alive (100% reuse rate)
+- **💾 Enhanced Caching**: LRU cache with compression and persistent storage
+- **🧠 Smart Model Selection**: Gemma3 (fast) and Llama3.1 (accurate) models
+- **📊 Real-time Metrics**: Comprehensive performance tracking and timing breakdown
+- **⚡ Async Processing**: Non-blocking operations with connection reuse
+- **🎯 GPU Acceleration**: Optimized for NVIDIA Quadro P2000 and similar hardware
+
+### 📈 Performance Results
+- **30.8% faster** on first translation (cold cache)
+- **244,891x faster** on cached translations
+
+## 🚀 Features
+
+- 🚀 **Local LLM Translation** with Baidu API compatibility
+- 🎤 **Text-to-Speech (TTS)** and optional streaming TTS over WebSocket
+- 🐳 **Docker Ready**, comprehensive cross-platform scripts
+
+## 🚀 Quick Start
+
+```bash
+# Backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python run.py
+
+# Web (open in browser)
+web/chat.html
+```
+
+More detailed setup in the sections below.
+
 ## ⚡ Performance Optimizations
 
 - **🔗 Connection Pooling**: Persistent HTTP connections with keep-alive (100% reuse rate)
@@ -1558,6 +1607,7 @@ print(f'Signature: {sign}')
 # Check API credentials
 curl -X POST "http://localhost:8000/api/trans/vip/translate" \
      --noproxy "*" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
      -d "q=test&from=en&to=zh&appid=demo_app_id&salt=123&sign=<generated_sign>"
 ```
 
@@ -1640,7 +1690,7 @@ The project includes comprehensive automation scripts for all platforms:
 - **`test_ollama_connectivity.py`** - Ollama connectivity tests
 
 ### Utilities
-- **`discover_service.py`** - Service discovery and network scanning
+- **discover_service.py** - Service discovery and network scanning
 - **`scripts/git_helper.ps1`** - Git operations and helpers
 - **`scripts/add_ollama_to_path.*`** - PATH management
 
@@ -1820,7 +1870,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 📋 **Load Balancing**: High-availability deployment guides
 
 ---
-
-**⚠️ Important Note**: This service is designed for local deployment and development use. For production deployment, ensure proper security measures, monitoring, resource allocation, and compliance with your organization's policies.
-
-**🚀 Quick Start**: Want to try it immediately? Run `scripts/setup.ps1` (Windows) or `scripts/setup.sh` (Linux/Mac) and then `python run.py`, then visit `http://localhost:8000/docs`!

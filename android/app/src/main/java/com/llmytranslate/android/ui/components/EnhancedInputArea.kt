@@ -31,7 +31,9 @@ fun EnhancedInputArea(
     isSpeaking: Boolean = false,
     isProcessing: Boolean,
     isNativeMode: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onResetConnection: (() -> Unit)? = null,
+    onShowDiagnostics: (() -> Unit)? = null
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     
@@ -173,6 +175,45 @@ fun EnhancedInputArea(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
+                }
+            }
+            
+            // Debug buttons (shown only when callback functions are provided)
+            if (onResetConnection != null || onShowDiagnostics != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    onResetConnection?.let { resetCallback ->
+                        OutlinedButton(
+                            onClick = resetCallback,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Reset")
+                        }
+                    }
+                    
+                    onShowDiagnostics?.let { diagnosticsCallback ->
+                        OutlinedButton(
+                            onClick = diagnosticsCallback,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Debug")
+                        }
+                    }
                 }
             }
         }

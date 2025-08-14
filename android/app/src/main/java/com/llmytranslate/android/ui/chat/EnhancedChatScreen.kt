@@ -137,7 +137,9 @@ fun EnhancedChatScreen(
             isVoiceInputActive = isListening,
             isSpeaking = isSpeaking,
             isProcessing = uiState.isProcessing,
-            isNativeMode = uiState.isNativeMode
+            isNativeMode = uiState.isNativeMode,
+            onResetConnection = { viewModel.resetTermuxConnection() },
+            onShowDiagnostics = { viewModel.getConnectionDiagnostics() }
         )
     }
 }

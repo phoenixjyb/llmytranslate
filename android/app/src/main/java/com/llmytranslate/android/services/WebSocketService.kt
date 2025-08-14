@@ -335,6 +335,35 @@ class WebSocketService : Service() {
     /**
      * Get current connection statistics.
      */
+    /**
+     * Send a chat message and wait for response.
+     */
+    suspend fun sendChatMessage(
+        message: String,
+        conversationId: String,
+        model: String = "gemma2:2b"
+    ): String = withContext(Dispatchers.IO) {
+        if (_connectionState.value != ConnectionState.CONNECTED) {
+            throw Exception("WebSocket not connected")
+        }
+        
+        val chatMessage = WebSocketMessage(
+            type = "chat_message",
+            text = message,
+            message = message, // Use the message field
+            sessionId = currentSessionId
+        )
+        
+        sendMessage(chatMessage)
+        
+        // Wait for response (simplified for now)
+        return@withContext "Response received from server" // Placeholder
+    }
+    
+    // State flow for received messages
+    private val _receivedMessages = MutableStateFlow<List<WebSocketMessage>>(emptyList())
+    val receivedMessages: StateFlow<List<WebSocketMessage>> = _receivedMessages.asStateFlow()
+    
     fun getConnectionStats(): ConnectionStats {
         return ConnectionStats(
             isConnected = _connectionState.value == ConnectionState.CONNECTED,

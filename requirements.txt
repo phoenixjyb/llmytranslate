@@ -10,6 +10,13 @@ pydantic-settings==2.1.0
 httpx==0.25.2
 aiohttp==3.9.1
 
+# Google Cloud AI Platform
+google-cloud-aiplatform==1.42.1
+google-cloud-core==2.4.1
+google-auth==2.25.2
+google-auth-oauthlib==1.2.0
+google-api-core==2.15.0
+
 # Network Management
 netifaces==0.11.0
 

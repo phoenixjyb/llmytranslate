@@ -189,10 +189,6 @@ class TTSService(private val context: Context) : TextToSpeech.OnInitListener {
     
     // Backward compatibility
     fun speak(text: String): Boolean = speak(text, TextToSpeech.QUEUE_FLUSH)
-            _error.value = "Failed to speak: ${e.message}"
-            false
-        }
-    }
     
     fun stop() {
         textToSpeech?.stop()

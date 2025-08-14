@@ -4,6 +4,14 @@
 
 **🆕 现已配备先进的性能优化：连接池、智能缓存和缓存翻译 244,891 倍速度提升！**
 
+## 📚 架构文档
+- 系统架构总览：`docs/architecture/SYSTEM_ARCHITECTURE.md`
+- 软件设计文档：`docs/architecture/SOFTWARE_DESIGN_DOCUMENT.md`
+- 数据流图：`docs/architecture/DATA_FLOW_DIAGRAM.md`
+- 软件栈流程图（中/英）：`docs/architecture/SOFTWARE_STACK_FLOWCHART-zh.md` / `docs/architecture/SOFTWARE_STACK_FLOWCHART.md`
+- Web 客户端指南：`docs/web/README.md`
+- Android 应用说明：`android/README.md`
+
 ## ⚡ 性能优化
 
 - **🔗 连接池**：持久 HTTP 连接与保活机制（100% 复用率）

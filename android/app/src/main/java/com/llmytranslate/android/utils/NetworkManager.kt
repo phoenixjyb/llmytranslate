@@ -34,6 +34,8 @@ class NetworkManager(private val context: Context) {
     companion object {
         private const val TAG = "NetworkManager"
         private val COMMON_PORTS = listOf(8000, 8080, 3000, 5000, 8888)
+        // Include localhost for Termux discovery
+        private val LOCALHOST_IPS = listOf("127.0.0.1", "localhost")
         private const val DISCOVERY_TIMEOUT_MS = 2000L
         private const val MAX_CONCURRENT_SCANS = 20
     }
@@ -43,11 +45,21 @@ class NetworkManager(private val context: Context) {
     /**
      * Discover LLMyTranslate servers on the local network.
      * Scans common ports and validates server responses.
+     * Includes localhost scan for Termux integration.
      */
     suspend fun discoverServers(): List<ServerDiscoveryResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<ServerDiscoveryResult>()
         
         try {
+            // First scan localhost for Termux
+            Log.i(TAG, "Scanning localhost for Termux services...")
+            LOCALHOST_IPS.forEach { ip ->
+                scanHostForLLMyTranslate(ip)?.let { result ->
+                    results.add(result)
+                    Log.i(TAG, "Found localhost server: $result")
+                }
+            }
+            
             val localIpRange = getLocalIpRange()
             if (localIpRange.isEmpty()) {
                 Log.w(TAG, "Could not determine local IP range")

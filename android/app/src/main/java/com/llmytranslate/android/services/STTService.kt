@@ -340,44 +340,35 @@ class STTService(private val context: Context) {
     private fun startSystemSpeechRecognition(language: String, continuous: Boolean) {
         if (speechRecognizer == null) {
             Log.e(TAG, "❌ Cannot start listening - speech recognizer not available")
-            _error.value = "Speech recognition not available"
+            fallbackToDirectRecording("Speech recognizer not available")
             return
         }
         
-        // Additional check for recognition availability
+        // Check for recognition availability but don't fail if false
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            Log.w(TAG, "⚠️ SpeechRecognizer.isRecognitionAvailable() returned false, but proceeding anyway...")
+            Log.w(TAG, "⚠️ SpeechRecognizer.isRecognitionAvailable() returned false, trying anyway...")
         }
         
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             
-            // Samsung S24 Ultra optimizations
-            if (isSamsungSTTAvailable) {
-                // Enable on-device processing for faster response
-                putExtra("samsung.stt.ondevice", true)
-                // Enable noise cancellation using hardware
-                putExtra("samsung.stt.noise_cancellation", true)
-                // Use hardware-accelerated VAD (Voice Activity Detection)
-                putExtra("samsung.stt.vad_enabled", true)
-                // Enable real-time partial results for better UX
-                putExtra("samsung.stt.realtime_partial", true)
-            }
+            // Use offline/on-device recognition when possible (faster, more reliable)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             
-            // Standard Android optimizations
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500)
+            // Don't force specific service components to avoid binding errors
+            // Let Android choose the best available service
             
-            // Samsung S24 Ultra specific optimizations
+            // Timeout configurations for better reliability
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 300)
+            
+            // Additional languages for better recognition
             putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf(language))
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // Use on-device recognition
-            
-            // Continuous listening for conversation mode
             if (continuous) {
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000)
@@ -550,42 +541,74 @@ class STTService(private val context: Context) {
                 _error.value = "Audio processing error: ${e.message}"
             }
         } finally {
-            // Clean up
-            withContext(Dispatchers.Main) {
-                stopListening()
+            // Clean up audio resources
+            try {
+                audioRecord?.release()
+                audioRecord = null
+                Log.i(TAG, "✅ Audio recording resources cleaned up")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error cleaning up audio resources: ${e.message}")
             }
         }
     }
     
     /**
-     * Convert audio bytes to text using cloud STT services.
+     * Convert audio bytes to text using local methods first, then cloud STT services.
      */
     private suspend fun convertAudioToText(audioBytes: ByteArray, language: String): String {
         return withContext(Dispatchers.IO) {
             try {
-                // Try Google Cloud Speech-to-Text first
+                // Priority 1: Try Android's local SpeechRecognizer with audio file
                 try {
-                    val result = convertWithGoogleCloud(audioBytes, language)
-                    if (result.isNotEmpty()) {
-                        Log.i(TAG, "✅ Successfully transcribed with Google Cloud STT")
+                    val result = convertWithLocalAndroidSTT(audioBytes, language)
+                    if (result.isNotEmpty() && !result.contains("not available")) {
+                        Log.i(TAG, "✅ Successfully transcribed with local Android STT")
                         return@withContext result
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "⚠️ Google Cloud STT failed: ${e.message}")
+                    Log.w(TAG, "⚠️ Local Android STT failed: ${e.message}")
                 }
                 
-                // Try Azure Speech Services
+                // Priority 2: Try to use simplified local processing 
                 try {
-                    val result = convertWithAzureSTT(audioBytes, language)
-                    if (result.isNotEmpty()) {
-                        Log.i(TAG, "✅ Successfully transcribed with Azure STT")
+                    val result = convertWithSimpleLocalSTT(audioBytes, language)
+                    if (result.isNotEmpty() && !result.contains("not implemented")) {
+                        Log.i(TAG, "✅ Successfully transcribed with simple local STT")
                         return@withContext result
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "⚠️ Azure STT failed: ${e.message}")
+                    Log.w(TAG, "⚠️ Simple local STT failed: ${e.message}")
                 }
                 
-                // Try OpenAI Whisper as last resort
+                // Priority 3: Try Google Cloud Speech-to-Text (if keys available)
+                if (googleCloudAPIKey.isNotEmpty()) {
+                    try {
+                        val result = convertWithGoogleCloud(audioBytes, language)
+                        if (result.isNotEmpty()) {
+                            Log.i(TAG, "✅ Successfully transcribed with Google Cloud STT")
+                            return@withContext result
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "⚠️ Google Cloud STT failed: ${e.message}")
+                    }
+                }
+                
+                // Priority 4: Try Azure Speech Services (if configured)
+                if (azureSTTKey.isNotEmpty()) {
+                    try {
+                        val result = convertWithAzureSTT(audioBytes, language)
+                        if (result.isNotEmpty()) {
+                            Log.i(TAG, "✅ Successfully transcribed with Azure STT")
+                            return@withContext result
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "⚠️ Azure STT failed: ${e.message}")
+                    }
+                } else {
+                    Log.w(TAG, "⚠️ Azure STT key not configured")
+                }
+                
+                // Priority 5: Try OpenAI Whisper (future implementation)
                 try {
                     val result = convertWithOpenAIWhisper(audioBytes, language)
                     if (result.isNotEmpty()) {
@@ -596,14 +619,66 @@ class STTService(private val context: Context) {
                     Log.w(TAG, "⚠️ OpenAI Whisper failed: ${e.message}")
                 }
                 
-                // Fallback to local processing if all cloud services fail
-                return@withContext "Speech detected (cloud services unavailable)"
+                // Final fallback: Return a message indicating local processing was attempted
+                Log.w(TAG, "All STT methods failed, audio was recorded but not transcribed")
+                return@withContext "Audio recorded (${audioBytes.size} bytes) but transcription services unavailable"
                 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ All STT conversion methods failed: ${e.message}")
                 return@withContext ""
             }
         }
+    }
+    
+    /**
+     * Try to use Android's local speech recognition capabilities with recorded audio.
+     */
+    private suspend fun convertWithLocalAndroidSTT(audioBytes: ByteArray, language: String): String {
+        // This would require creating a temporary audio file and using Android's
+        // local speech recognition APIs, which is complex but possible
+        Log.i(TAG, "Local Android STT not yet implemented for recorded audio")
+        return "Local Android STT not available"
+    }
+    
+    /**
+     * Simple local STT using basic audio analysis.
+     */
+    private suspend fun convertWithSimpleLocalSTT(audioBytes: ByteArray, language: String): String {
+        // For now, just analyze if there's speech-like audio
+        val hasValidSpeech = analyzeAudioForSpeech(audioBytes)
+        if (hasValidSpeech) {
+            return "Speech detected - local transcription not implemented"
+        }
+        return "No speech detected in audio"
+    }
+    
+    /**
+     * Analyze audio data to determine if it contains speech-like patterns.
+     */
+    private fun analyzeAudioForSpeech(audioBytes: ByteArray): Boolean {
+        if (audioBytes.size < 1000) return false
+        
+        // Simple volume and frequency analysis
+        var highVolumeCount = 0
+        var totalSamples = 0
+        
+        for (i in audioBytes.indices step 2) {
+            if (i + 1 < audioBytes.size) {
+                val sample = (audioBytes[i].toInt() and 0xFF) or ((audioBytes[i + 1].toInt() and 0xFF) shl 8)
+                val volume = kotlin.math.abs(sample - 32768)
+                
+                if (volume > 1000) { // Threshold for "significant" audio
+                    highVolumeCount++
+                }
+                totalSamples++
+            }
+        }
+        
+        val speechRatio = highVolumeCount.toFloat() / totalSamples
+        val hasSpeech = speechRatio > 0.1 && totalSamples > 100
+        
+        Log.d(TAG, "Audio analysis: ${highVolumeCount}/${totalSamples} samples above threshold, ratio: $speechRatio, has speech: $hasSpeech")
+        return hasSpeech
     }
     
     /**
@@ -794,21 +869,20 @@ class STTService(private val context: Context) {
         if (!isListening) return
         
         try {
+            // Set flag to stop recording loop cooperatively
+            isListening = false
+            _isListening.value = false
+            
             if (useDirectAudioRecording) {
-                // Stop direct audio recording
-                recordingJob?.cancel()
+                // Stop direct audio recording gracefully
                 audioRecord?.stop()
-                audioRecord?.release()
-                audioRecord = null
-                Log.i(TAG, "Stopped direct audio recording")
+                Log.i(TAG, "Stopped direct audio recording, allowing processing to complete")
             } else {
                 // Stop system speech recognizer
                 speechRecognizer?.stopListening()
                 Log.i(TAG, "Stopped system speech recognition")
             }
             
-            isListening = false
-            _isListening.value = false
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping speech recognition", e)
         }
@@ -821,12 +895,13 @@ class STTService(private val context: Context) {
         if (!isListening) return
         
         try {
+            // Set flag to stop recording loop cooperatively
+            isListening = false
+            _isListening.value = false
+            
             if (useDirectAudioRecording) {
-                // Cancel direct audio recording
-                recordingJob?.cancel()
+                // Cancel direct audio recording gracefully
                 audioRecord?.stop()
-                audioRecord?.release()
-                audioRecord = null
                 Log.i(TAG, "Cancelled direct audio recording")
             } else {
                 // Cancel system speech recognizer
@@ -834,9 +909,6 @@ class STTService(private val context: Context) {
                 Log.i(TAG, "Cancelled system speech recognition")
             }
             
-            isListening = false
-            _isListening.value = false
-            _partialResults.value = ""
         } catch (e: Exception) {
             Log.e(TAG, "Error cancelling speech recognition", e)
         }
@@ -912,6 +984,37 @@ class STTService(private val context: Context) {
         Log.w(TAG, "💡 Or: Settings > Language & input > Voice input > Default voice input")
     }
     
+    /**
+     * Fallback to direct audio recording with local processing priority.
+     */
+    private fun fallbackToDirectRecording(reason: String) {
+        Log.w(TAG, "🔄 Falling back to direct recording: $reason")
+        
+        if (useDirectAudioRecording) {
+            Log.i(TAG, "Already using direct recording mode")
+            return
+        }
+        
+        // Clean up system recognizer
+        speechRecognizer?.destroy()
+        speechRecognizer = null
+        
+        // Initialize direct audio recording
+        if (initializeDirectAudioRecording()) {
+            useDirectAudioRecording = true
+            Log.i(TAG, "✅ Successfully switched to direct audio recording mode")
+            
+            // Reset error count since we switched modes
+            consecutiveErrors = 0
+            
+            // Start recording immediately with the current request
+            startDirectAudioRecording(currentLanguage, false)
+        } else {
+            Log.e(TAG, "❌ Failed to initialize direct audio recording fallback")
+            _error.value = "Speech recognition unavailable - please check device settings"
+        }
+    }
+
     /**
      * Check if device supports offline speech recognition.
      */
@@ -990,8 +1093,9 @@ class STTService(private val context: Context) {
                     handlePersistentError("Speech recognition service unavailable. Please try again or check device settings.")
                 }
                 10 -> { // ERROR_LANGUAGE_NOT_SUPPORTED or other binding issues
-                    Log.e(TAG, "⚠️ Persistent error 10 - likely speech service binding issue")
-                    handlePersistentError("Speech recognition unavailable. Please check device speech settings or try again later.")
+                    Log.e(TAG, "⚠️ Error 10 - speech service binding issue, falling back to direct recording")
+                    // For error 10, switch to direct recording immediately since it's a binding/availability issue
+                    fallbackToDirectRecording("Speech service binding failed")
                 }
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
                     Log.w(TAG, "⚠️ Recognizer busy - will retry")

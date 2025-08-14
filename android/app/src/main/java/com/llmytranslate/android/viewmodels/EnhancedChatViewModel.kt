@@ -11,8 +11,17 @@ import com.llmytranslate.android.services.TermuxOllamaClient
 import com.llmytranslate.android.services.STTService
 import com.llmytranslate.android.services.TTSService
 import com.llmytranslate.android.services.WebSocketService
+import com.llmytranslate.android.utils.TermuxStreamingConfig
+import com.llmytranslate.android.utils.TermuxDebugger
+import com.llmytranslate.android.utils.ConnectionLogger
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.delay
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.*
 
 /**
@@ -57,6 +66,7 @@ class EnhancedChatViewModel(
     
     init {
         observeSTTResults()
+        observeSTTErrors()
         observeTTSEvents()
         observeWebSocketMessages()
     }
@@ -70,8 +80,24 @@ class EnhancedChatViewModel(
             sttService.initialize()
             // TTSService initializes automatically in constructor
             
-            // Test Termux connection
+            // Test Termux connection with detailed debugging
             val (connected, message) = termuxOllamaClient.testConnection()
+            
+            if (!connected) {
+                // Run detailed diagnostics if connection fails
+                Log.w("EnhancedChatViewModel", "Termux connection failed, running diagnostics...")
+                val debugInfo = TermuxDebugger.debugTermuxConnection(context)
+                Log.i("EnhancedChatViewModel", "Debug info:\n$debugInfo")
+                
+                // Show debug info in chat for troubleshooting
+                addSystemMessage("🔍 Termux Connection Debug:\n$debugInfo")
+            } else {
+                // Focus on realistic mobile CPU optimization instead of GPU
+                checkAndReportMobileOptimization()
+                
+                addSystemMessage("🚀 Native mode enabled - Termux Ollama connected")
+            }
+            
             _uiState.value = _uiState.value.copy(
                 termuxConnected = connected,
                 isNativeMode = connected // Auto-enable native mode if Termux is available
@@ -79,8 +105,10 @@ class EnhancedChatViewModel(
             
             if (connected) {
                 addSystemMessage("🚀 Native mode enabled - Termux Ollama connected")
+                TermuxStreamingConfig.updateTermuxConnection(true)
             } else {
                 addSystemMessage("🌐 Web mode - $message")
+                TermuxStreamingConfig.updateTermuxConnection(false)
             }
         }
     }
@@ -148,48 +176,158 @@ class EnhancedChatViewModel(
      * Process message using native Termux Ollama (fastest path).
      */
     private suspend fun processWithNative(text: String): String {
-        _uiState.value = _uiState.value.copy(processingStage = "Native AI processing...")
+        _uiState.value = _uiState.value.copy(processingStage = "🤔 Ollama is thinking...")
         
-        val result = termuxOllamaClient.chatCompletion(
-            prompt = text,
-            model = "gemma2:2b",
-            timeoutMs = 30000L
-        )
+        // Add progress updates during processing
+        val progressJob = viewModelScope.launch {
+            var dots = 0
+            while (true) {
+                delay(1000)
+                dots = (dots + 1) % 4
+                val thinking = "🤔 Ollama is thinking" + ".".repeat(dots)
+                _uiState.value = _uiState.value.copy(processingStage = thinking)
+            }
+        }
         
-        return if (result.success) {
-            result.response
-        } else {
-            // Fallback to web service if native fails
-            addSystemMessage("⚠️ Native processing failed, using web fallback")
-            processWithWebService(text)
+        try {
+            // Keep gemma2:2b as default for quality, qwen2:0.5b as performance fallback
+            val defaultModel = "gemma2:2b"     // Primary model - better quality
+            val performanceModel = "qwen2:0.5b" // Fallback for speed if needed
+            
+            val result = withTimeoutOrNull(45000L) { // 45 second timeout
+                termuxOllamaClient.chatCompletion(
+                    prompt = text,
+                    model = defaultModel, // Use gemma2:2b as primary
+                    timeoutMs = 40000L // 40 second internal timeout
+                )
+            }
+            
+            // If fast model fails, mention model optimization
+            progressJob.cancel()
+            
+            return if (result?.success == true) {
+                addSystemMessage("✅ Native processing successful (${result.latencyMs}ms via ${result.method})")
+                result.response
+            } else {
+                val errorMsg = result?.error ?: "Timeout after 45 seconds - Ollama may be too slow on CPU"
+                
+                val healthSummary = termuxOllamaClient.getConnectionHealthSummary()
+                
+                addSystemMessage("⚠️ Native processing failed: $errorMsg")
+                addSystemMessage(healthSummary)
+                addSystemMessage("💡 To speed up mobile Ollama:")
+                addSystemMessage("   • ollama pull qwen2:0.5b (fastest, 350MB)")
+                addSystemMessage("   • ollama pull phi3:mini (fast, 1.3GB)")
+                addSystemMessage("   • Current model may be too large for smooth mobile use")
+                addSystemMessage("🌐 Switching to web fallback...")
+                
+                processWithWebService(text)
+            }
+        } finally {
+            progressJob.cancel()
         }
     }
     
     /**
      * Process message using web service fallback.
      */
-    private suspend fun processWithWebService(text: String): String {
+    private suspend fun processWithWebService(text: String): String = withContext(Dispatchers.IO) {
         _uiState.value = _uiState.value.copy(processingStage = "Web service processing...")
         
-        // TODO: Implement WebSocket-based processing
-        // For now, return placeholder
-        return "Web service response to: $text"
+        return@withContext try {
+            // Try to discover servers first
+            val networkManager = com.llmytranslate.android.utils.NetworkManager(context)
+            val servers = networkManager.discoverServers()
+            
+            if (servers.isEmpty()) {
+                "❌ No LLMyTranslate servers found on network\n\nPlease ensure:\n• Server is running on port 8000\n• Device is connected to same WiFi network\n• Server allows connections from other devices"
+            } else {
+                val server = servers.first()
+                
+                // Make HTTP request to chat API
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                
+                val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
+                val json = """
+                    {
+                        "message": "$text",
+                        "conversation_id": "android_${System.currentTimeMillis()}",
+                        "model": "gemma2:2b"
+                    }
+                """.trimIndent()
+                
+                val request = okhttp3.Request.Builder()
+                    .url("${server.baseUrl}/api/chat")
+                    .post(json.toRequestBody(mediaType))
+                    .addHeader("Content-Type", "application/json")
+                    .build()
+                
+                val response = client.newCall(request).execute()
+                
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string() ?: ""
+                    
+                    // Parse JSON response to extract the actual message
+                    try {
+                        val jsonResponse = org.json.JSONObject(responseBody)
+                        val message = jsonResponse.optString("response", responseBody)
+                        if (message.isNotBlank()) message else "✅ Connected to ${server.host}:${server.port}"
+                    } catch (e: Exception) {
+                        responseBody.ifBlank { "✅ Server responded successfully" }
+                    }
+                } else {
+                    "❌ Server error (${response.code}): ${response.message}\n\nServer: ${server.host}:${server.port}"
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Web service error", e)
+            "❌ Web service error: ${e.message}\n\nTroubleshooting:\n• Check server is running: http://localhost:8000\n• Verify network connectivity\n• Try native mode if available"
+        }
     }
     
     /**
      * Start voice input using native STT.
      */
     fun startVoiceInput() {
-        sttService.startListening(continuous = false)
-        _uiState.value = _uiState.value.copy(processingStage = "Listening...")
+        viewModelScope.launch {
+            try {
+                sttService.startListening(continuous = false)
+                _uiState.value = _uiState.value.copy(
+                    isProcessing = true,
+                    processingStage = "Listening for speech..."
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isProcessing = false,
+                    processingStage = ""
+                )
+                addSystemMessage("❌ Failed to start voice input: ${e.message}")
+            }
+        }
     }
     
     /**
      * Stop voice input.
      */
     fun stopVoiceInput() {
-        sttService.stopListening()
-        _uiState.value = _uiState.value.copy(processingStage = "")
+        viewModelScope.launch {
+            try {
+                sttService.stopListening()
+                _uiState.value = _uiState.value.copy(
+                    isProcessing = false,
+                    processingStage = ""
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isProcessing = false,
+                    processingStage = ""
+                )
+            }
+        }
     }
     
     /**
@@ -227,15 +365,55 @@ class EnhancedChatViewModel(
     private fun observeSTTResults() {
         viewModelScope.launch {
             sttService.finalResults.collect { result ->
+                // Clear listening state when STT completes
+                _uiState.value = _uiState.value.copy(
+                    isProcessing = false,
+                    processingStage = ""
+                )
+                
                 result?.let {
-                    if (it.text.isNotBlank()) {
-                        sendMessage(it.text)
+                    // Only process meaningful speech, not fallback/error messages
+                    val text = it.text.trim()
+                    val isValidSpeech = text.isNotBlank() && 
+                        !text.contains("cloud services unavailable", ignoreCase = true) &&
+                        !text.contains("Speech detected", ignoreCase = true) &&
+                        !text.contains("transcription services unavailable", ignoreCase = true) &&
+                        !text.contains("Audio recorded", ignoreCase = true) &&
+                        !text.contains("not available", ignoreCase = true) &&
+                        !text.contains("not implemented", ignoreCase = true) &&
+                        text.length > 5 // Minimum meaningful length
+                    
+                    if (isValidSpeech) {
+                        Log.i("EnhancedChatViewModel", "✅ Processing valid speech: '$text'")
+                        sendMessage(text)
+                    } else {
+                        Log.w("EnhancedChatViewModel", "⚠️ Skipping fallback message: '$text'")
+                        // Show helpful message instead of processing fallback text
+                        addSystemMessage("🎤 Voice recording completed. Please try speaking more clearly or check microphone settings.")
                     }
                 }
             }
         }
     }
     
+    /**
+     * Observe STT errors to clear processing state.
+     */
+    private fun observeSTTErrors() {
+        viewModelScope.launch {
+            sttService.error.collect { error ->
+                if (error != null) {
+                    // Clear processing state on STT error
+                    _uiState.value = _uiState.value.copy(
+                        isProcessing = false,
+                        processingStage = ""
+                    )
+                    addSystemMessage("❌ Speech recognition error: $error")
+                }
+            }
+        }
+    }
+
     /**
      * Observe TTS events for UI updates.
      */
@@ -362,5 +540,106 @@ class EnhancedChatViewModel(
             lastLatencyMs = latencyMs,
             averageLatencyMs = averageLatency
         )
+    }
+    
+    /**
+     * Reset Termux connection health and try native mode again.
+     */
+    fun resetTermuxConnection() {
+        viewModelScope.launch {
+            termuxOllamaClient.resetConnectionHealth()
+            addSystemMessage("🔄 Connection health reset - testing Termux Ollama again...")
+            
+            // Re-test connection
+            val (connected, message) = termuxOllamaClient.testConnection()
+            _uiState.value = _uiState.value.copy(
+                termuxConnected = connected,
+                isNativeMode = connected
+            )
+            
+            if (connected) {
+                addSystemMessage("✅ Termux Ollama reconnected!")
+                TermuxStreamingConfig.updateTermuxConnection(true)
+            } else {
+                addSystemMessage("❌ Still can't connect: $message")
+                TermuxStreamingConfig.updateTermuxConnection(false)
+            }
+        }
+    }
+    
+    /**
+     * Get detailed connection diagnostics.
+     */
+    fun getConnectionDiagnostics() {
+        viewModelScope.launch {
+            val healthSummary = termuxOllamaClient.getConnectionHealthSummary()
+            val debugInfo = TermuxDebugger.debugTermuxConnection(context)
+            
+            addSystemMessage("📊 Connection Diagnostics:")
+            addSystemMessage(healthSummary)
+            addSystemMessage(debugInfo)
+            
+            // Print logcat instructions
+            ConnectionLogger.printLogcatInstructions()
+            addSystemMessage("🔍 Logcat filter command printed to logs!")
+            addSystemMessage("Use: adb logcat -s LLMyTranslate_Connection*")
+        }
+    }
+    
+    /**
+     * Check realistic mobile optimization and provide practical recommendations.
+     */
+    private fun checkAndReportMobileOptimization() {
+        viewModelScope.launch {
+            try {
+                addSystemMessage("📱 Mobile Performance Analysis")
+                addSystemMessage("💻 Using CPU optimization (GPU not available in Termux)")
+                
+                // Get device specs
+                val cpuCores = Runtime.getRuntime().availableProcessors()
+                val maxMemory = Runtime.getRuntime().maxMemory() / (1024 * 1024) // MB
+                
+                addSystemMessage("� Device Specs:")
+                addSystemMessage("  • CPU cores: $cpuCores")
+                addSystemMessage("  • Available memory: ${maxMemory}MB")
+                
+                addSystemMessage("⚡ Realistic Performance Expectations:")
+                addSystemMessage("  • gemma2:2b (1.6GB): 3-8 seconds response")
+                addSystemMessage("  • phi3:mini (1.3GB): 2-5 seconds response")
+                addSystemMessage("  • qwen2:0.5b (350MB): 1-3 seconds response")
+                
+                addSystemMessage("🔧 Termux CPU Optimization Commands:")
+                addSystemMessage("  export OLLAMA_NUM_PARALLEL=1")
+                addSystemMessage("  export OLLAMA_MAX_LOADED_MODELS=1")
+                addSystemMessage("  export OLLAMA_NUM_THREAD=$cpuCores")
+                addSystemMessage("  export OLLAMA_KEEP_ALIVE=5m")
+                addSystemMessage("  export OLLAMA_GPU=0  # Be honest - no GPU")
+                
+                addSystemMessage("� Mobile Optimization Tips:")
+                addSystemMessage("  ✅ Close other apps to free memory")
+                addSystemMessage("  ✅ Use quantized models when available")
+                addSystemMessage("  ✅ Keep phone plugged in during heavy use")
+                addSystemMessage("  ✅ Avoid multitasking during inference")
+                
+                if (maxMemory < 3000) {
+                    addSystemMessage("⚠️ Limited memory detected")
+                    addSystemMessage("  • Consider qwen2:0.5b for better performance")
+                    addSystemMessage("  • Close background apps before using")
+                }
+                
+            } catch (e: Exception) {
+                Log.e("EnhancedChatViewModel", "Mobile optimization check failed: ${e.message}", e)
+                addSystemMessage("❌ Mobile optimization check failed: ${e.message}")
+                addSystemMessage("💻 Using default CPU-only settings")
+            }
+        }
+    }
+    
+    /**
+     * Manual mobile optimization diagnostics for troubleshooting.
+     */
+    fun runMobileOptimizationCheck() {
+        addSystemMessage("🔍 Running mobile performance diagnostics...")
+        checkAndReportMobileOptimization()
     }
 }
