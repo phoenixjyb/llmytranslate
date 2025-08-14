@@ -6,6 +6,7 @@
     <title>LLM Chatbot - Cross Platform</title>
     <link rel="stylesheet" href="assets/chat.css">
     <link rel="stylesheet" href="assets/user-styles.css">
+    <link rel="stylesheet" href="assets/streaming-tts.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -167,5 +168,34 @@
         }
     </script>
     <script src="assets/chat.js"></script>
+    <script src="assets/streaming-tts-production.js"></script>
+    <script src="assets/chat-streaming-integration.js"></script>
+    
+    <script>
+        // Initialize enhanced chat with streaming TTS
+        console.log('🎵 Initializing enhanced chat with streaming TTS...');
+        
+        // Add streaming TTS status to platform info
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                if (window.chatBot && window.chatBot.streamingTTS) {
+                    console.log('✅ Streaming TTS integration confirmed');
+                    
+                    // Show integration success notification
+                    setTimeout(() => {
+                        if (window.chatBot.streamingTTS.isConnected) {
+                            window.chatBot.showNotification(
+                                '🎵 Streaming TTS ready! Toggle it on to hear AI responses in real-time.', 
+                                'success', 
+                                6000
+                            );
+                        }
+                    }, 2000);
+                } else {
+                    console.warn('⚠️ Streaming TTS integration not detected');
+                }
+            }, 1000);
+        });
+    </script>
 </body>
 </html>

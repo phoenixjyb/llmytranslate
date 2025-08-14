@@ -133,7 +133,9 @@ fun EnhancedChatScreen(
             },
             onStartVoiceInput = { viewModel.startVoiceInput() },
             onStopVoiceInput = { viewModel.stopVoiceInput() },
+            onStopSpeaking = { viewModel.stopSpeaking() },
             isVoiceInputActive = isListening,
+            isSpeaking = isSpeaking,
             isProcessing = uiState.isProcessing,
             isNativeMode = uiState.isNativeMode
         )

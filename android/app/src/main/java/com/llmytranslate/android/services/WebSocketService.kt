@@ -6,6 +6,8 @@ import android.os.Binder
 import android.os.IBinder
 import android.util.Log
 import com.llmytranslate.android.models.*
+import com.llmytranslate.android.utils.PerformanceTracker
+import com.llmytranslate.android.utils.NetworkOperation
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +17,7 @@ import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import java.net.URI
 import java.util.*
+import kotlin.system.measureTimeMillis
 
 /**
  * WebSocketService manages real-time communication with LLMyTranslate server.
@@ -55,14 +58,19 @@ class WebSocketService : Service() {
     
     override fun onCreate() {
         super.onCreate()
-        Log.i(TAG, "WebSocketService created")
+        val createTime = PerformanceTracker.measureStage("websocket_service_create") {
+            Log.i(TAG, "🔧 WebSocketService created")
+        }
+        PerformanceTracker.logMemoryUsage("WebSocketService created")
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        disconnect()
-        serviceScope.cancel()
-        Log.i(TAG, "WebSocketService destroyed")
+        val destroyTime = PerformanceTracker.measureStage("websocket_service_destroy") {
+            disconnect()
+            serviceScope.cancel()
+            Log.i(TAG, "🔌 WebSocketService destroyed")
+        }
     }
     
     /**
@@ -74,8 +82,11 @@ class WebSocketService : Service() {
             return
         }
         
+        val connectionStartTime = System.currentTimeMillis()
         currentServerUrl = serverUrl
         _connectionState.value = ConnectionState.CONNECTING
+        
+        Log.i(TAG, "🔗 Starting WebSocket connection to: $serverUrl")
         
         serviceScope.launch {
             try {
@@ -84,7 +95,14 @@ class WebSocketService : Service() {
                 
                 webSocketClient = object : WebSocketClient(uri) {
                     override fun onOpen(handshake: ServerHandshake?) {
-                        Log.i(TAG, "WebSocket connected")
+                        val connectionDuration = System.currentTimeMillis() - connectionStartTime
+                        Log.i(TAG, "✅ WebSocket connected in ${connectionDuration}ms")
+                        
+                        PerformanceTracker.logNetworkOperation(
+                            NetworkOperation.WEBSOCKET_CONNECT, 
+                            connectionDuration
+                        )
+                        
                         _connectionState.value = ConnectionState.CONNECTED
                         reconnectAttempts = 0
                         isReconnecting = false
@@ -94,13 +112,23 @@ class WebSocketService : Service() {
                     }
                     
                     override fun onMessage(message: String?) {
-                        message?.let { handleIncomingMessage(it) }
+                        val messageStartTime = System.currentTimeMillis()
+                        message?.let { 
+                            val processTime = PerformanceTracker.measureStage("websocket_message_process") {
+                                handleIncomingMessage(it)
+                            }
+                            
+                            PerformanceTracker.logNetworkOperation(
+                                NetworkOperation.MESSAGE_RECEIVE, 
+                                System.currentTimeMillis() - messageStartTime
+                            )
+                        }
                     }
                     
                     override fun onClose(code: Int, reason: String?, remote: Boolean) {
-                        Log.i(TAG, "WebSocket closed: code=$code, reason=$reason, remote=$remote")
+                        Log.i(TAG, "🔌 WebSocket closed: code=$code, reason=$reason, remote=$remote")
                         _connectionState.value = ConnectionState.DISCONNECTED
-                        
+                    
                         // Attempt reconnection if not manually disconnected
                         if (remote && !isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                             attemptReconnect()
@@ -123,19 +151,19 @@ class WebSocketService : Service() {
     }
     
     /**
-     * Disconnect from WebSocket server.
+     * Disconnect from server.
      */
     fun disconnect() {
-        isReconnecting = false
-        currentSessionId?.let { endSession(it) }
-        
-        webSocketClient?.close()
-        webSocketClient = null
-        currentServerUrl = null
-        currentSessionId = null
-        
-        _connectionState.value = ConnectionState.DISCONNECTED
-        Log.i(TAG, "WebSocket disconnected")
+        val disconnectTime = measureTimeMillis {
+            webSocketClient?.close()
+            webSocketClient = null
+            currentServerUrl = null
+            currentSessionId = null
+            
+            _connectionState.value = ConnectionState.DISCONNECTED
+            Log.i(TAG, "🔌 WebSocket disconnected")
+        }
+        PerformanceTracker.logNetworkOperation(NetworkOperation.WEBSOCKET_DISCONNECT, disconnectTime)
     }
     
     /**
@@ -143,12 +171,17 @@ class WebSocketService : Service() {
      */
     fun sendTextMessage(text: String) {
         currentSessionId?.let { sessionId ->
-            val message = WebSocketMessage(
-                type = "text_input",
-                sessionId = sessionId,
-                text = text
-            )
-            sendMessage(message)
+            val sendTime = measureTimeMillis {
+                val message = WebSocketMessage(
+                    type = "text_input",
+                    sessionId = sessionId,
+                    text = text
+                )
+                sendMessage(message)
+                Log.d(TAG, "📤 Sent text message: ${text.take(50)}...")
+            }
+            
+            PerformanceTracker.logNetworkOperation(NetworkOperation.MESSAGE_SEND, sendTime)
         }
     }
     
@@ -157,12 +190,16 @@ class WebSocketService : Service() {
      */
     fun updateSettings(settings: SessionSettings) {
         currentSessionId?.let { sessionId ->
-            val message = WebSocketMessage(
-                type = "settings_update",
-                sessionId = sessionId,
-                settings = settings
-            )
-            sendMessage(message)
+            val updateTime = measureTimeMillis {
+                val message = WebSocketMessage(
+                    type = "settings_update",
+                    sessionId = sessionId,
+                    settings = settings
+                )
+                sendMessage(message)
+                Log.d(TAG, "⚙️ Updated session settings")
+            }
+            PerformanceTracker.logNetworkOperation(NetworkOperation.SETTINGS_UPDATE, updateTime)
         }
     }
     
@@ -199,43 +236,78 @@ class WebSocketService : Service() {
      * Send WebSocket message to server.
      */
     private fun sendMessage(message: WebSocketMessage) {
-        try {
-            val jsonMessage = messageAdapter.toJson(message)
-            webSocketClient?.send(jsonMessage)
-            Log.d(TAG, "Sent message: ${message.type}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending message", e)
+        val sendTime = measureTimeMillis {
+            try {
+                val jsonMessage = messageAdapter.toJson(message)
+                webSocketClient?.send(jsonMessage)
+                Log.d(TAG, "📤 Sent message: ${message.type}")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error sending message", e)
+            }
         }
+        PerformanceTracker.logNetworkOperation(NetworkOperation.MESSAGE_SEND, sendTime)
     }
     
     /**
      * Handle incoming WebSocket messages.
      */
     private fun handleIncomingMessage(messageJson: String) {
-        try {
-            val message = messageAdapter.fromJson(messageJson)
-            if (message != null) {
-                Log.d(TAG, "Received message: ${message.type}")
-                
-                // Handle special message types
-                when (message.type) {
-                    "session_started" -> {
-                        message.serverInfo?.let { _serverInfo.value = it }
-                        Log.i(TAG, "Session started with server info")
+        val handleTime = measureTimeMillis {
+            try {
+                val message = messageAdapter.fromJson(messageJson)
+                message?.let {
+                    Log.d(TAG, "Received message: ${it.type}")
+                    
+                    // Handle special message types
+                    when (it.type) {
+                        "session_started" -> {
+                            it.serverInfo?.let { serverInfo -> _serverInfo.value = serverInfo }
+                            Log.i(TAG, "Session started with server info")
+                        }
+                        "ai_response" -> {
+                            Log.i(TAG, "Received AI response: ${it.text?.take(50)}...")
+                        }
+                        "streaming_audio_chunk" -> {
+                            Log.d(TAG, "🎵 Received streaming audio chunk ${it.chunkIndex}/${it.totalChunks}")
+                            handleStreamingAudioChunk(it)
+                        }
+                        "tts_streaming_started" -> {
+                            Log.i(TAG, "🚀 Streaming TTS started")
+                        }
+                        "tts_streaming_completed" -> {
+                            Log.i(TAG, "✅ Streaming TTS completed")
+                        }
+                        "tts_streaming_error" -> {
+                            Log.w(TAG, "❌ Streaming TTS error: ${it.message}")
+                        }
+                        "error" -> {
+                            Log.w(TAG, "Server error: ${it.message}")
+                        }
                     }
-                    "ai_response" -> {
-                        Log.i(TAG, "Received AI response: ${message.text?.take(50)}...")
-                    }
-                    "error" -> {
-                        Log.w(TAG, "Server error: ${message.message}")
-                    }
+                    
+                    // Emit message to UI
+                    _incomingMessages.value = it
                 }
-                
-                // Emit message to UI
-                _incomingMessages.value = message
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing incoming message", e)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing incoming message", e)
+        }
+        PerformanceTracker.logNetworkOperation(NetworkOperation.MESSAGE_RECEIVE, handleTime)
+    }
+    
+    /**
+     * Handle streaming audio chunks for immediate playback.
+     */
+    private fun handleStreamingAudioChunk(message: WebSocketMessage) {
+        // Emit the audio chunk for immediate processing by TTS service
+        serviceScope.launch {
+            message.audioChunk?.let { audioData ->
+                message.text?.let { text ->
+                    Log.d(TAG, "🎵 Processing audio chunk: '$text' (${audioData.length} chars)")
+                    // The TTSService will handle immediate playback
+                    _incomingMessages.value = message
+                }
+            }
         }
     }
     

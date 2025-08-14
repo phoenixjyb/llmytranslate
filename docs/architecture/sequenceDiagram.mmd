@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+    participant C as Client (Web/Android)
+    participant WS as WebSocket /ws/streaming-tts
+    participant API as FastAPI Router
+    participant SVC as Streaming Service
+    participant LLM as Ollama Runtime
+
+    C->>WS: Connect
+    WS->>API: Upgrade handshake
+    API-->>C: 101 Switching Protocols
+
+    C->>WS: start_streaming_chat(message, conversationId, model)
+    WS->>API: Route to streaming handler
+    API->>SVC: start_session()
+    SVC-->>C: tts_streaming_started(sessionId)
+
+    loop Incremental generation
+        SVC->>LLM: generate_next_chunk()
+        LLM-->>SVC: chunk(text, isFinal?)
+        SVC-->>C: llm_response_chunk(content, isFinal=false)
+        par Immediate speech (client)
+            C-->>C: SpeechSynthesis.speak(content)
+        and Optional audio (server)
+            SVC-->>C: streaming_audio_chunk(index, text)
+        end
+    end
+
+    SVC-->>C: tts_streaming_completed(summary)
+    C-->>WS: Close

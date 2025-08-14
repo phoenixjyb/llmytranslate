@@ -1,214 +1,187 @@
 package com.llmytranslate.android.viewmodels
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.llmytranslate.android.models.*
+import com.llmytranslate.android.models.ChatMessage
+import com.llmytranslate.android.models.ConnectionState
 import com.llmytranslate.android.services.STTService
 import com.llmytranslate.android.services.TTSService
 import com.llmytranslate.android.services.WebSocketService
-import com.llmytranslate.android.utils.NetworkManager
-import com.llmytranslate.android.utils.ServerDiscoveryResult
-import kotlinx.coroutines.flow.*
+import com.llmytranslate.android.utils.PerformanceTracker
+import com.llmytranslate.android.utils.AudioOperation
+import com.llmytranslate.android.utils.NetworkOperation
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.util.Log
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
-/**
- * MainViewModel manages the overall application state and coordinates services.
- */
-class MainViewModel(private val context: Context) : ViewModel() {
-    
-    // Initialize services
-    private val networkManager = NetworkManager(context)
-    private val sttService = STTService(context)
-    private val ttsService = TTSService(context)
-    
-    // Application state
-    private val _uiState = MutableStateFlow(MainUiState())
-    val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
-    
-    // Server discovery
-    private val _discoveredServers = MutableStateFlow<List<ServerDiscoveryResult>>(emptyList())
-    val discoveredServers: StateFlow<List<ServerDiscoveryResult>> = _discoveredServers.asStateFlow()
-    
-    // Connection state
-    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
-    
-    // WebSocket service reference (will be injected when service is bound)
-    private var webSocketService: WebSocketService? = null
-    
+@HiltViewModel
+class MainViewModel @Inject constructor(
+    private val sttService: STTService,
+    private val ttsService: TTSService,
+    private val webSocketService: WebSocketService
+) : ViewModel() {
+
+    companion object {
+        private const val TAG = "MainViewModel"
+    }
+
+    // UI State
+    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
+    val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
+
+    private val _inputText = MutableStateFlow("")
+    val inputText: StateFlow<String> = _inputText.asStateFlow()
+
+    private val _isListening = MutableStateFlow(false)
+    val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
+
+    private val _isSpeaking = MutableStateFlow(false)
+    val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
+    private val _isConnected = MutableStateFlow(false)
+    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val _currentLanguage = MutableStateFlow("en-US")
+    val currentLanguage: StateFlow<String> = _currentLanguage.asStateFlow()
+
     init {
-        initializeServices()
-        discoverServers()
+        Log.i(TAG, "🚀 MainViewModel initialized with services")
+        observeServiceStates()
     }
-    
-    /**
-     * Initialize core services.
-     */
-    private fun initializeServices() {
+
+    private fun observeServiceStates() {
         viewModelScope.launch {
-            // Initialize STT service
-            sttService.initialize()
-            
-            // TTSService initializes automatically in constructor
-            
-            _uiState.value = _uiState.value.copy(isInitialized = true)
+            // Observe STT state
+            sttService.isListeningState.collect { listening ->
+                _isListening.value = listening
+            }
+        }
+
+        viewModelScope.launch {
+            // Observe STT results
+            sttService.finalResults.collect { result ->
+                result?.let { sttResult ->
+                    _inputText.value = sttResult.text
+                    Log.i(TAG, "📝 Speech recognition result: ${sttResult.text}")
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            // Observe TTS state
+            ttsService.isSpeakingState.collect { speaking ->
+                _isSpeaking.value = speaking
+            }
+        }
+
+        viewModelScope.launch {
+            // Observe WebSocket connection
+            webSocketService.connectionState.collect { state ->
+                _isConnected.value = state == ConnectionState.CONNECTED
+            }
+        }
+
+        viewModelScope.launch {
+            // Observe errors from all services
+            launch {
+                sttService.error.collect { error ->
+                    error?.let { _error.value = "STT: $it" }
+                }
+            }
+            launch {
+                ttsService.error.collect { error ->
+                    error?.let { _error.value = "TTS: $it" }
+                }
+            }
         }
     }
-    
-    /**
-     * Discover LLMyTranslate servers on the network.
-     */
-    fun discoverServers() {
+
+    fun updateInputText(text: String) {
+        _inputText.value = text
+    }
+
+    fun startListening() {
+        Log.i(TAG, "🎤 Starting speech recognition")
+        val startTime = System.currentTimeMillis()
+        
+        sttService.startListening(_currentLanguage.value)
+        
+        val duration = System.currentTimeMillis() - startTime
+        PerformanceTracker.logAudioOperation(
+            AudioOperation.STT_START,
+            duration
+        )
+    }
+
+    fun stopListening() {
+        Log.i(TAG, "⏹️ Stopping speech recognition")
+        sttService.stopListening()
+    }
+
+    fun toggleListening() {
+        if (_isListening.value) {
+            stopListening()
+        } else {
+            startListening()
+        }
+    }
+
+    fun stopSpeaking() {
+        Log.i(TAG, "🔇 Stopping text-to-speech")
+        ttsService.stop()
+    }
+
+    fun sendMessage() {
+        val messageText = _inputText.value.trim()
+        if (messageText.isEmpty()) return
+
+        Log.i(TAG, "📤 Sending message: $messageText")
+        val startTime = System.currentTimeMillis()
+
+        val userMessage = ChatMessage(
+            id = System.currentTimeMillis().toString(),
+            text = messageText,
+            isUser = true,
+            timestamp = System.currentTimeMillis()
+        )
+
+        _messages.value = _messages.value + userMessage
+        _inputText.value = ""
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                connectionState = ConnectionState.CONNECTING
-            )
-            
             try {
-                val servers = networkManager.discoverServers()
-                _discoveredServers.value = servers
+                webSocketService.sendTextMessage(messageText)
                 
-                if (servers.isNotEmpty()) {
-                    val bestServer = servers.minByOrNull { it.responseTime }
-                    bestServer?.let { server ->
-                        _uiState.value = _uiState.value.copy(
-                            serverInfo = server.serverInfo,
-                            connectionState = ConnectionState.DISCONNECTED
-                        )
-                    }
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        connectionState = ConnectionState.ERROR
-                    )
-                }
+                val duration = System.currentTimeMillis() - startTime
+                PerformanceTracker.logNetworkOperation(
+                    NetworkOperation.MESSAGE_SEND,
+                    duration
+                )
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    connectionState = ConnectionState.ERROR
-                )
+                Log.e(TAG, "❌ Failed to send message", e)
+                _error.value = "Failed to send message: ${e.message}"
             }
         }
     }
-    
-    /**
-     * Connect to a specific server.
-     */
-    fun connectToServer(server: ServerDiscoveryResult) {
-        viewModelScope.launch {
-            webSocketService?.let { service ->
-                val sessionSettings = SessionSettings(
-                    language = "en-US",
-                    kidFriendly = false,
-                    model = "gemma2:2b",
-                    useNativeSTT = true,
-                    useNativeTTS = true
-                )
-                
-                service.connect(server.websocketUrl, sessionSettings)
-                
-                // Update UI state
-                _uiState.value = _uiState.value.copy(
-                    connectionState = ConnectionState.CONNECTING,
-                    serverInfo = server.serverInfo
-                )
-            }
-        }
+
+    fun clearError() {
+        _error.value = null
     }
-    
-    /**
-     * Set WebSocket service reference (called when service is bound).
-     */
-    fun setWebSocketService(service: WebSocketService) {
-        webSocketService = service
-        
-        // Observe WebSocket connection state
-        viewModelScope.launch {
-            service.connectionState.collect { state ->
-                _connectionState.value = state
-                _uiState.value = _uiState.value.copy(connectionState = state)
-            }
-        }
-        
-        // Observe server info updates
-        viewModelScope.launch {
-            service.serverInfo.collect { serverInfo ->
-                serverInfo?.let {
-                    _uiState.value = _uiState.value.copy(serverInfo = it)
-                }
-            }
-        }
+
+    fun changeLanguage(language: String) {
+        _currentLanguage.value = language
+        Log.i(TAG, "🌐 Language changed to: $language")
     }
-    
-    /**
-     * Disconnect from current server.
-     */
-    fun disconnect() {
-        webSocketService?.disconnect()
-        _uiState.value = _uiState.value.copy(
-            connectionState = ConnectionState.DISCONNECTED,
-            currentSessionId = null
-        )
-    }
-    
-    /**
-     * Get current network status.
-     */
-    fun getNetworkStatus(): NetworkStatus {
-        return NetworkStatus(
-            isConnected = networkManager.hasInternetConnection(),
-            isWiFi = networkManager.isWiFiConnected(),
-            hasInternet = networkManager.hasInternetConnection(),
-            wifiName = networkManager.getCurrentWiFiName()
-        )
-    }
-    
-    /**
-     * Get STT service capabilities.
-     */
-    fun getSTTCapabilities(): STTCapabilities {
-        return STTCapabilities(
-            isAvailable = true, // Android STT is always available
-            supportsOffline = sttService.supportsOfflineRecognition(),
-            availableLanguages = sttService.getAvailableLanguages(),
-            supportsContinuous = true,
-            supportsPartialResults = true
-        )
-    }
-    
-    /**
-     * Get TTS service capabilities.
-     */
-    fun getTTSCapabilities(): TTSCapabilities {
-        return TTSCapabilities(
-            isAvailable = ttsService.isInitializedState.value,
-            supportsOffline = true, // Android TTS is always offline
-            supportsSamsungNeural = false, // Simplified for now
-            availableLanguages = ttsService.getAvailableLanguages()?.map { it.toString() } ?: emptyList(),
-            supportsSSML = true
-        )
-    }
-    
+
     override fun onCleared() {
         super.onCleared()
-        webSocketService?.disconnect()
-        sttService.stopListening()
-        ttsService.cleanup()
+        Log.i(TAG, "🧹 MainViewModel cleared")
     }
 }
-
-// Capability data classes
-data class STTCapabilities(
-    val isAvailable: Boolean,
-    val supportsOffline: Boolean,
-    val availableLanguages: List<String>,
-    val supportsContinuous: Boolean,
-    val supportsPartialResults: Boolean
-)
-
-data class TTSCapabilities(
-    val isAvailable: Boolean,
-    val supportsOffline: Boolean,
-    val supportsSamsungNeural: Boolean,
-    val availableLanguages: List<String>,
-    val supportsSSML: Boolean
-)

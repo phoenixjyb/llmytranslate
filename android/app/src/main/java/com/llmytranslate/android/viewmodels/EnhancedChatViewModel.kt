@@ -1,10 +1,12 @@
 package com.llmytranslate.android.viewmodels
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmytranslate.android.models.ConnectionState
 import com.llmytranslate.android.models.Message
+import com.llmytranslate.android.models.WebSocketMessage
 import com.llmytranslate.android.services.TermuxOllamaClient
 import com.llmytranslate.android.services.STTService
 import com.llmytranslate.android.services.TTSService
@@ -56,6 +58,7 @@ class EnhancedChatViewModel(
     init {
         observeSTTResults()
         observeTTSEvents()
+        observeWebSocketMessages()
     }
     
     /**
@@ -243,6 +246,78 @@ class EnhancedChatViewModel(
                 _uiState.value = _uiState.value.copy(
                     isProcessing = isSpeaking
                 )
+            }
+        }
+    }
+    
+    /**
+     * Observe WebSocket messages for streaming TTS and other events.
+     */
+    private fun observeWebSocketMessages() {
+        viewModelScope.launch {
+            webSocketService.incomingMessages.collect { message ->
+                message?.let { handleWebSocketMessage(it) }
+            }
+        }
+    }
+    
+    /**
+     * Handle incoming WebSocket messages, especially streaming TTS chunks.
+     */
+    private fun handleWebSocketMessage(message: WebSocketMessage) {
+        when (message.type) {
+            "tts_streaming_started" -> {
+                addSystemMessage("🚀 AI started speaking (streaming)")
+                message.sessionId?.let { sessionId ->
+                    ttsService.startStreaming(sessionId)
+                }
+            }
+            
+            "streaming_audio_chunk" -> {
+                // Handle streaming audio chunk for immediate playback
+                message.text?.let { text ->
+                    val chunkIndex = message.chunkIndex ?: 0
+                    val isFirstChunk = chunkIndex == 0
+                    
+                    Log.d("StreamingTTS", "🎵 Received chunk $chunkIndex: '${text.take(30)}...'")
+                    ttsService.addStreamingChunk(text, chunkIndex, isFirstChunk)
+                }
+            }
+            
+            "tts_streaming_completed" -> {
+                addSystemMessage("✅ AI finished speaking")
+                ttsService.completeStreaming()
+            }
+            
+            "tts_streaming_error" -> {
+                addSystemMessage("❌ Speech error: ${message.message}")
+                ttsService.stopStreaming()
+            }
+            
+            "ai_response" -> {
+                // Handle traditional (non-streaming) AI response
+                message.text?.let { text ->
+                    val aiMessage = Message(
+                        id = UUID.randomUUID().toString(),
+                        text = text,
+                        isUser = false,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    addMessage(aiMessage)
+                    
+                    // Speak with traditional TTS if not using streaming
+                    if (ttsService.isInitializedState.value && !ttsService.isStreamingState.value) {
+                        ttsService.speak(text)
+                    }
+                }
+            }
+            
+            "session_started" -> {
+                addSystemMessage("🔗 Connected to LLMyTranslate server")
+            }
+            
+            "error" -> {
+                addSystemMessage("❌ Server error: ${message.message}")
             }
         }
     }

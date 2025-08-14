@@ -87,6 +87,9 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("org.java-websocket:Java-WebSocket:1.5.4")
     
+    // Audio processing for STT
+    implementation("androidx.media3:media3-common:1.2.1")
+    
     // JSON Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     implementation("com.squareup.moshi:moshi:1.15.0")

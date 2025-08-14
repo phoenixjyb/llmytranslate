@@ -19,6 +19,7 @@ from .api.routes import translation, health, admin, discovery, optimized, chatbo
 from .api.routes import voice_chat as voice_chat_routes
 from .api.routes import phone_call as phone_call_routes
 from .api.routes import android as android_routes
+from .api.routes import streaming_tts as streaming_tts_routes
 
 # Mock logger
 class MockLogger:
@@ -162,6 +163,7 @@ def create_app() -> FastAPI:
     app.include_router(phone_call_routes.router)  # Add phone call routes
     app.include_router(android_routes.router)  # Add Android-optimized routes
     app.include_router(background_music.router, prefix="/api")  # Add background music routes
+    app.include_router(streaming_tts_routes.router)  # Add streaming TTS WebSocket routes
     app.include_router(phase4_status.router)  # Add Phase 4 status monitoring routes
     
     # Mount static files for web interface BEFORE other routes

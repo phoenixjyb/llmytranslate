@@ -166,9 +166,10 @@ async def handle_android_session_start(websocket: WebSocket, message: Dict) -> s
     return session_id
 
 async def handle_android_text_input(websocket: WebSocket, message: Dict):
-    """Process text input from Android STT and generate AI response."""
+    """Process text input from Android STT and generate AI response with optional streaming TTS."""
     session_id = message["session_id"]
     user_text = message.get("text", "").strip()
+    use_streaming_tts = message.get("use_streaming_tts", False)  # NEW: Check for streaming TTS request
     
     if not user_text:
         await safe_android_send(websocket, {
@@ -189,11 +190,32 @@ async def handle_android_text_input(websocket: WebSocket, message: Dict):
         # Update last activity
         session.last_activity = time.time()
         
-        # Send processing status
+        if use_streaming_tts:
+            # NEW: Use streaming TTS approach
+            await process_android_with_streaming_tts(websocket, session, user_text)
+        else:
+            # EXISTING: Traditional approach
+            await process_android_traditional(websocket, session, user_text)
+            
+    except Exception as e:
+        logger.error(f"Android text processing error: {e}")
         await safe_android_send(websocket, {
-            "type": "processing_started",
-            "message": "AI is thinking...",
+            "type": "error",
+            "message": f"Processing failed: {str(e)}",
             "session_id": session_id
+        })
+
+async def process_android_with_streaming_tts(websocket: WebSocket, session, user_text: str):
+    """NEW: Process Android text input with streaming TTS support."""
+    session_id = session.session_id
+    
+    try:
+        # Send streaming start notification
+        await safe_android_send(websocket, {
+            "type": "tts_streaming_started",
+            "message": "AI is thinking and will speak as thoughts form...",
+            "session_id": session_id,
+            "timestamp": time.time()
         })
         
         # Add to conversation history
@@ -203,28 +225,30 @@ async def handle_android_text_input(websocket: WebSocket, message: Dict):
             "timestamp": datetime.now().isoformat()
         })
         
-        # Prepare conversation context
-        conversation_context = []
+        # Prepare conversation context as a single prompt
+        conversation_prompt = ""
         
         # Add kid-friendly prompt if enabled
         if session.settings.get("kid_friendly", False):
             system_prompt = kid_friendly_service.get_kid_friendly_prompt_prefix(
                 session.settings.get("language", "en")
             )
-            conversation_context.append({"role": "system", "content": system_prompt})
+            conversation_prompt += f"System: {system_prompt}\n\n"
         
         # Add recent conversation history (last 10 messages)
         for msg in session.conversation_history[-10:]:
-            conversation_context.append(msg)
+            role = msg["role"].title()
+            content = msg["content"]
+            conversation_prompt += f"{role}: {content}\n"
         
-        # Start LLM processing timer
+        # Add current user message
+        conversation_prompt += f"User: {user_text}\nAssistant:"
+        
+        # Get LLM response
         llm_start_time = time.time()
-        
-        # Get AI response
         llm_response = await ollama_client.chat_completion(
-            messages=conversation_context,
-            model=session.settings.get("model", "gemma2:2b"),
-            stream=False
+            message=conversation_prompt,
+            model=session.settings.get("model", "gemma2:2b")
         )
         
         llm_duration = time.time() - llm_start_time
@@ -233,28 +257,49 @@ async def handle_android_text_input(websocket: WebSocket, message: Dict):
             raise Exception(f"LLM processing failed: {llm_response.get('error', 'Unknown error')}")
         
         ai_text = llm_response["response"]
-        
-        # Clean text for better TTS (remove emojis, fix formatting)
         clean_ai_text = clean_text_for_android_tts(ai_text)
+        
+        # Split response into chunks for streaming
+        chunks = split_text_for_streaming(clean_ai_text)
+        total_chunks = len(chunks)
+        
+        # Send streaming audio chunks
+        for i, chunk in enumerate(chunks):
+            await safe_android_send(websocket, {
+                "type": "streaming_audio_chunk",
+                "session_id": session_id,
+                "chunk_index": i,
+                "total_chunks": total_chunks,
+                "text": chunk,
+                "audio_chunk": "",  # Android uses native TTS, no audio data needed
+                "content_type": "text/plain",
+                "processing_time": 0.1,
+                "is_final": i == total_chunks - 1,
+                "timestamp": time.time()
+            })
+            
+            # Small delay between chunks for natural flow
+            await asyncio.sleep(0.2)
+            logger.debug(f"🎵 Sent Android chunk {i+1}/{total_chunks}: '{chunk[:30]}...'")
+        
+        # Send completion notification
+        await safe_android_send(websocket, {
+            "type": "tts_streaming_completed",
+            "session_id": session_id,
+            "message": "AI response complete",
+            "summary": {
+                "total_chunks": total_chunks,
+                "total_duration_ms": round(llm_duration * 1000, 2),
+                "text_length": len(clean_ai_text)
+            },
+            "timestamp": time.time()
+        })
         
         # Add to conversation history
         session.conversation_history.append({
-            "role": "assistant", 
+            "role": "assistant",
             "content": ai_text,
             "timestamp": datetime.now().isoformat()
-        })
-        
-        # Send AI response to Android
-        await safe_android_send(websocket, {
-            "type": "ai_response",
-            "text": clean_ai_text,
-            "original_text": ai_text,
-            "session_id": session_id,
-            "timing": {
-                "llm_processing": llm_duration,
-                "total_processing": time.time() - llm_start_time
-            },
-            "use_native_tts": True  # Signal Android to use native TTS
         })
         
         # Record performance metrics
@@ -267,15 +312,140 @@ async def handle_android_text_input(websocket: WebSocket, message: Dict):
             success=True
         )
         
-        logger.info(f"Android conversation processed in {llm_duration:.2f}s: {user_text[:50]}...")
+        logger.info(f"✅ Android streaming TTS completed: {total_chunks} chunks, {llm_duration:.2f}s")
         
     except Exception as e:
-        logger.error(f"Android text processing error: {e}")
+        logger.error(f"❌ Android streaming TTS error: {e}")
         await safe_android_send(websocket, {
-            "type": "error",
-            "message": f"Processing failed: {str(e)}",
-            "session_id": session_id
+            "type": "tts_streaming_error",
+            "session_id": session_id,
+            "error": str(e),
+            "message": "Streaming TTS failed",
+            "timestamp": time.time()
         })
+
+async def process_android_traditional(websocket: WebSocket, session, user_text: str):
+    """EXISTING: Traditional Android text processing (maintain compatibility)."""
+    session_id = session.session_id
+    
+    # Send processing status
+    await safe_android_send(websocket, {
+        "type": "processing_started", 
+        "message": "AI is thinking...",
+        "session_id": session_id
+    })
+    
+    # Add to conversation history
+    session.conversation_history.append({
+        "role": "user",
+        "content": user_text,
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    # Prepare conversation context as a single prompt
+    conversation_prompt = ""
+    
+    # Add kid-friendly prompt if enabled
+    if session.settings.get("kid_friendly", False):
+        system_prompt = kid_friendly_service.get_kid_friendly_prompt_prefix(
+            session.settings.get("language", "en")
+        )
+        conversation_prompt += f"System: {system_prompt}\n\n"
+    
+    # Add recent conversation history (last 10 messages)
+    for msg in session.conversation_history[-10:]:
+        role = msg["role"].title()
+        content = msg["content"]
+        conversation_prompt += f"{role}: {content}\n"
+    
+    # Add current user message
+    conversation_prompt += f"User: {user_text}\nAssistant:"
+    
+    # Start LLM processing timer
+    llm_start_time = time.time()
+    
+    # Get AI response
+    llm_response = await ollama_client.chat_completion(
+        message=conversation_prompt,
+        model=session.settings.get("model", "gemma2:2b")
+    )
+    
+    llm_duration = time.time() - llm_start_time
+    
+    if not llm_response.get("success", False):
+        raise Exception(f"LLM processing failed: {llm_response.get('error', 'Unknown error')}")
+    
+    ai_text = llm_response["response"]
+    
+    # Clean text for better TTS (remove emojis, fix formatting)
+    clean_ai_text = clean_text_for_android_tts(ai_text)
+    
+    # Add to conversation history
+    session.conversation_history.append({
+        "role": "assistant", 
+        "content": ai_text,
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    # Send AI response to Android
+    await safe_android_send(websocket, {
+        "type": "ai_response",
+        "text": clean_ai_text,
+        "original_text": ai_text,
+        "session_id": session_id,
+        "timing": {
+            "llm_processing": llm_duration,
+            "total_processing": time.time() - llm_start_time
+        },
+        "use_native_tts": True  # Signal Android to use native TTS
+    })
+    
+    # Record performance metrics
+    performance_monitor.record_llm_performance(
+        session_id=session_id,
+        duration=llm_duration,
+        model=session.settings.get("model", "gemma2:2b"),
+        input_length=len(user_text),
+        output_length=len(ai_text),
+        success=True
+    )
+    
+    logger.info(f"Android conversation processed in {llm_duration:.2f}s: {user_text[:50]}...")
+
+def split_text_for_streaming(text: str) -> list[str]:
+    """Split text into natural chunks for streaming TTS."""
+    # Split by sentences first
+    sentences = text.split('. ')
+    chunks = []
+    current_chunk = ""
+    
+    for sentence in sentences:
+        # Add the sentence to current chunk
+        candidate_chunk = current_chunk + sentence
+        
+        # If adding punctuation back
+        if sentence != sentences[-1]:
+            candidate_chunk += '. '
+        
+        # Check if chunk is getting too long
+        if len(candidate_chunk) > 100 and current_chunk:
+            # Save current chunk and start new one
+            chunks.append(current_chunk.strip())
+            current_chunk = sentence
+            if sentence != sentences[-1]:
+                current_chunk += '. '
+        else:
+            current_chunk = candidate_chunk
+    
+    # Add final chunk if it has content
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    
+    # Ensure we have at least one chunk
+    if not chunks:
+        chunks = [text]
+    
+    return chunks
 
 async def handle_android_settings_update(websocket: WebSocket, message: Dict):
     """Update session settings from Android app."""
@@ -402,21 +572,20 @@ async def android_simple_chat(request: ChatRequest):
             "kid_friendly": False
         }
         
-        # Prepare conversation context
-        conversation_context = []
+        # Prepare conversation context as a single prompt
+        conversation_prompt = ""
         if settings.get("kid_friendly", False):
             system_prompt = kid_friendly_service.get_kid_friendly_prompt_prefix(
                 settings.get("language", "en")
             )
-            conversation_context.append({"role": "system", "content": system_prompt})
+            conversation_prompt += f"System: {system_prompt}\n\n"
         
-        conversation_context.append({"role": "user", "content": request.message})
+        conversation_prompt += f"User: {request.message}\nAssistant:"
         
         # Get AI response
         llm_response = await ollama_client.chat_completion(
-            messages=conversation_context,
-            model=settings.get("model", "gemma2:2b"),
-            stream=False
+            message=conversation_prompt,
+            model=settings.get("model", "gemma2:2b")
         )
         
         if not llm_response.get("success", False):

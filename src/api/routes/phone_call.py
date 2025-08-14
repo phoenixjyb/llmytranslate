@@ -1108,7 +1108,103 @@ async def handle_audio_data(websocket: WebSocket, message: Dict):
             phone_manager.audio_buffers[session_id].clear()
 
 async def process_llm_response(websocket: WebSocket, session: PhoneCallSession, user_text: str):
-    """Process user input with LLM and generate response."""
+    """Process user input with LLM and generate response with streaming TTS support."""
+    try:
+        # Check if client supports streaming TTS
+        use_streaming_tts = session.settings.get("use_streaming_tts", False)
+        
+        if use_streaming_tts:
+            # NEW: Use streaming TTS approach
+            await process_llm_with_streaming_tts(websocket, session, user_text)
+        else:
+            # EXISTING: Traditional approach
+            await process_llm_traditional(websocket, session, user_text)
+            
+    except Exception as e:
+        logger.error(f"LLM processing error: {e}")
+        await websocket.send_text(json.dumps({
+            "type": "error",
+            "message": f"AI processing failed: {str(e)}"
+        }))
+
+async def process_llm_with_streaming_tts(websocket: WebSocket, session: PhoneCallSession, user_text: str):
+    """NEW: Process LLM with streaming TTS for Android devices."""
+    # Import streaming TTS service here to avoid circular imports
+    from services.streaming_tts_service import StreamingTTSService
+    from services.streaming_tts_websocket import StreamingTTSWebSocketHandler
+    
+    try:
+        # Initialize streaming TTS if not exists
+        if not hasattr(session, 'streaming_tts'):
+            session.streaming_tts = StreamingTTSService()
+            session.streaming_handler = StreamingTTSWebSocketHandler(session.streaming_tts)
+        
+        # Send background music if enabled
+        background_music_task = None
+        if session.settings.get("background_music", True):
+            background_music_task = asyncio.create_task(
+                send_background_music(websocket, session.session_id)
+            )
+        
+        # Build conversation context
+        conversation_context = []
+        
+        # Add kid-friendly prompt if enabled
+        if session.settings.get("kid_friendly", False):
+            system_prompt = kid_friendly_service.get_kid_friendly_prompt_prefix(
+                session.settings.get("language", "en")
+            )
+            conversation_context.append({"role": "system", "content": system_prompt})
+        
+        # Add recent conversation history
+        for interaction in session.conversation_history[-6:]:
+            if interaction["type"] == "user_speech":
+                conversation_context.append({"role": "user", "content": interaction["content"]})
+            elif interaction["type"] == "ai_response":
+                conversation_context.append({"role": "assistant", "content": interaction["content"]})
+        
+        # Add current user message
+        conversation_context.append({"role": "user", "content": user_text})
+        
+        # Get streaming LLM response
+        async def create_llm_stream():
+            """Create streaming LLM response"""
+            # Use existing LLM service but with streaming enabled
+            llm_response = await ollama_client.chat_completion_streaming(
+                messages=conversation_context,
+                model=session.settings.get("model", "gemma2:2b")
+            )
+            async for chunk in llm_response:
+                if chunk.get("done", False):
+                    break
+                if "message" in chunk and "content" in chunk["message"]:
+                    yield chunk["message"]["content"]
+        
+        # Process with streaming TTS
+        await session.streaming_handler.handle_llm_response_with_streaming_tts(
+            websocket=websocket,
+            session_id=session.session_id,
+            llm_text_stream=create_llm_stream(),
+            language=session.settings.get("language", "en"),
+            voice=session.settings.get("voice", "default"),
+            speed=session.settings.get("speed", 1.0),
+            tts_mode="fast"
+        )
+        
+        # Stop background music if it was started
+        if background_music_task:
+            background_music_task.cancel()
+            try:
+                await background_music_task
+            except asyncio.CancelledError:
+                pass
+                
+    except Exception as e:
+        logger.error(f"Streaming TTS processing error: {e}")
+        raise
+
+async def process_llm_traditional(websocket: WebSocket, session: PhoneCallSession, user_text: str):
+    """EXISTING: Traditional LLM processing (maintain compatibility)."""
     try:
         # Send background music if enabled
         background_music_task = None

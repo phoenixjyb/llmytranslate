@@ -13,7 +13,7 @@ This directory contains comprehensive architecture documentation for the LLM Tra
 ### 📊 Technical Details
 - **[DATA_FLOW_DIAGRAM.md](DATA_FLOW_DIAGRAM.md)** - Data flow and processing diagrams
 - **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** - File system organization and structure
-- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Project organization and component relationships
+- **[PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** - Project organization and component relationships
 
 ## 🎨 Diagram Types
 
@@ -36,14 +36,19 @@ The **SOFTWARE_STACK_FLOWCHART.md** provides:
 - Start with **[SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md)** for system overview
 - Review **[SOFTWARE_STACK_FLOWCHART.md](SOFTWARE_STACK_FLOWCHART.md)** for component relationships
 - Check **[DATA_FLOW_DIAGRAM.md](DATA_FLOW_DIAGRAM.md)** for processing flows
+- See **[docs/web/README.md](../web/README.md)** for Web client details
 
 ### For DevOps/Deployment
 - Focus on **[SOFTWARE_STACK_FLOWCHART.md](SOFTWARE_STACK_FLOWCHART.md)** deployment section
 - Reference **[SOFTWARE_DESIGN_DOCUMENT.md](SOFTWARE_DESIGN_DOCUMENT.md)** for technical requirements
 
 ### For Project Management
-- Review **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** for project organization
+- Review **[../PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md)** for project organization
 - Check **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** for file layouts
+
+### 📱 Client Architectures
+- **Web Client**: [docs/web/README.md](../web/README.md)
+- **Android App**: [android/README.md](../../android/README.md) — see “Component Diagram (Mermaid)”
 
 ## 🔧 Architecture Highlights
 

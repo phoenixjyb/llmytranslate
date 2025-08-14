@@ -115,7 +115,22 @@ data class WebSocketMessage(
     @Json(name = "server_info") val serverInfo: ServerInfo? = null,
     val timing: ProcessingTiming? = null,
     @Json(name = "use_native_tts") val useNativeTTS: Boolean? = null,
-    @Json(name = "original_text") val originalText: String? = null
+    @Json(name = "original_text") val originalText: String? = null,
+    // Streaming TTS fields
+    @Json(name = "audio_chunk") val audioChunk: String? = null,
+    @Json(name = "chunk_index") val chunkIndex: Int? = null,
+    @Json(name = "total_chunks") val totalChunks: Int? = null,
+    @Json(name = "content_type") val contentType: String? = null,
+    @Json(name = "processing_time") val processingTime: Float? = null,
+    @Json(name = "is_final") val isFinal: Boolean? = null,
+    @Json(name = "stream_info") val streamInfo: StreamInfo? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class StreamInfo(
+    @Json(name = "chunks_sent") val chunksSent: Int? = null,
+    @Json(name = "total_audio_kb") val totalAudioKb: Float? = null,
+    @Json(name = "stream_duration") val streamDuration: Float? = null
 )
 
 @JsonClass(generateAdapter = true)

@@ -12,6 +12,7 @@ import java.util.*
 /**
  * TTSService handles native Android text-to-speech functionality.
  * Optimized for Samsung S24 Ultra with Samsung TTS engine.
+ * Enhanced with streaming TTS support for real-time conversation.
  */
 class TTSService(private val context: Context) : TextToSpeech.OnInitListener {
     
@@ -27,12 +28,20 @@ class TTSService(private val context: Context) : TextToSpeech.OnInitListener {
     private var speechRate = 1.0f
     private var pitch = 1.0f
     
+    // Streaming TTS support
+    private val audioQueue = mutableListOf<String>()
+    private var isStreamingActive = false
+    private var currentStreamSessionId: String? = null
+    
     // State flows for UI updates
     private val _isInitialized = MutableStateFlow(false)
     val isInitializedState: StateFlow<Boolean> = _isInitialized.asStateFlow()
     
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeakingState: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+    
+    private val _isStreaming = MutableStateFlow(false)
+    val isStreamingState: StateFlow<Boolean> = _isStreaming.asStateFlow()
     
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -78,26 +87,108 @@ class TTSService(private val context: Context) : TextToSpeech.OnInitListener {
             
             override fun onDone(utteranceId: String?) {
                 _isSpeaking.value = false
+                
+                // Process next chunk in queue if streaming
+                if (isStreamingActive && audioQueue.isNotEmpty()) {
+                    val nextText = audioQueue.removeAt(0)
+                    Log.d(TAG, "🎵 Playing next streaming chunk: '${nextText.take(30)}...'")
+                    speak(nextText, TextToSpeech.QUEUE_FLUSH)
+                } else if (isStreamingActive && audioQueue.isEmpty()) {
+                    Log.d(TAG, "🎵 Streaming queue empty, waiting for next chunk...")
+                }
             }
             
             override fun onError(utteranceId: String?) {
                 _isSpeaking.value = false
                 _error.value = "Speech synthesis error"
+                Log.e(TAG, "TTS error for utterance: $utteranceId")
+                
+                // Continue with next chunk even on error
+                if (isStreamingActive && audioQueue.isNotEmpty()) {
+                    val nextText = audioQueue.removeAt(0)
+                    speak(nextText, TextToSpeech.QUEUE_FLUSH)
+                }
             }
         })
     }
     
-    fun speak(text: String): Boolean {
+    /**
+     * Start streaming TTS session.
+     */
+    fun startStreaming(sessionId: String) {
+        Log.i(TAG, "🚀 Starting streaming TTS session: $sessionId")
+        currentStreamSessionId = sessionId
+        isStreamingActive = true
+        _isStreaming.value = true
+        audioQueue.clear()
+    }
+    
+    /**
+     * Add text chunk to streaming queue and play immediately if not speaking.
+     */
+    fun addStreamingChunk(text: String, chunkIndex: Int, isFirstChunk: Boolean = false) {
+        if (!isInitialized) {
+            Log.w(TAG, "TTS not initialized, cannot add streaming chunk")
+            return
+        }
+        
+        Log.d(TAG, "🎵 Adding streaming chunk $chunkIndex: '${text.take(50)}...'")
+        
+        if (isFirstChunk || !_isSpeaking.value) {
+            // Speak immediately if first chunk or not currently speaking
+            Log.d(TAG, "🎵 Speaking chunk immediately (first: $isFirstChunk, speaking: ${_isSpeaking.value})")
+            speak(text, TextToSpeech.QUEUE_FLUSH)
+        } else {
+            // Add to queue for sequential playback
+            audioQueue.add(text)
+            Log.d(TAG, "🎵 Added to queue (queue size: ${audioQueue.size})")
+        }
+    }
+    
+    /**
+     * Complete streaming session.
+     */
+    fun completeStreaming() {
+        Log.i(TAG, "✅ Completing streaming TTS session: $currentStreamSessionId")
+        isStreamingActive = false
+        _isStreaming.value = false
+        currentStreamSessionId = null
+        // Don't clear queue - let remaining chunks finish playing
+    }
+    
+    /**
+     * Stop streaming and clear queue.
+     */
+    fun stopStreaming() {
+        Log.i(TAG, "🛑 Stopping streaming TTS session: $currentStreamSessionId")
+        isStreamingActive = false
+        _isStreaming.value = false
+        currentStreamSessionId = null
+        audioQueue.clear()
+        textToSpeech?.stop()
+        _isSpeaking.value = false
+    }
+    
+    fun speak(text: String, queueMode: Int = TextToSpeech.QUEUE_FLUSH): Boolean {
         if (!isInitialized) {
             _error.value = "TTS not initialized"
             return false
         }
         
         return try {
-            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utterance_${System.currentTimeMillis()}")
+            val utteranceId = "utterance_${System.currentTimeMillis()}"
+            Log.d(TAG, "🔊 Speaking: '${text.take(50)}...' (mode: $queueMode)")
+            textToSpeech?.speak(text, queueMode, null, utteranceId)
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to speak text", e)
+            _error.value = "Failed to speak: ${e.message}"
+            false
+        }
+    }
+    
+    // Backward compatibility
+    fun speak(text: String): Boolean = speak(text, TextToSpeech.QUEUE_FLUSH)
             _error.value = "Failed to speak: ${e.message}"
             false
         }

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streaming TTS Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #2d3748;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        
+        .status.connecting {
+            background: #fef3cd;
+            color: #8b6914;
+            border: 1px solid #f6e05e;
+        }
+        
+        .status.connected {
+            background: #d1f2eb;
+            color: #0c5460;
+            border: 1px solid #48bb78;
+        }
+        
+        .status.streaming {
+            background: #bee3f8;
+            color: #2a69ac;
+            border: 1px solid #4299e1;
+        }
+        
+        .status.error {
+            background: #fed7d7;
+            color: #c53030;
+            border: 1px solid #fc8181;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            min-width: 300px;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+        
+        button {
+            padding: 12px 24px;
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover:not(:disabled) {
+            background: #3182ce;
+        }
+        
+        button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+        
+        .log-container {
+            background: #1a202c;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+        }
+        
+        .log-timestamp {
+            color: #68d391;
+            font-weight: 500;
+        }
+        
+        .log-type {
+            color: #63b3ed;
+            font-weight: 500;
+        }
+        
+        .log-message {
+            color: #e2e8f0;
+        }
+        
+        .streaming-indicator {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+            padding: 15px;
+            background: #e6fffa;
+            border: 2px solid #38b2ac;
+            border-radius: 8px;
+            color: #234e52;
+        }
+        
+        .streaming-indicator.active {
+            display: flex;
+        }
+        
+        .wave-animation {
+            display: flex;
+            gap: 3px;
+        }
+        
+        .wave-bar {
+            width: 4px;
+            height: 20px;
+            background: #38b2ac;
+            border-radius: 2px;
+            animation: wave 1.5s ease-in-out infinite;
+        }
+        
+        .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+        
+        @keyframes wave {
+            0%, 40%, 100% { transform: scaleY(0.4); }
+            20% { transform: scaleY(1); }
+        }
+        
+        .performance-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #718096;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Streaming TTS Test</h1>
+        
+        <div id="status" class="status connecting">
+            Connecting to WebSocket...
+        </div>
+        
+        <div class="controls">
+            <input type="text" id="text-input" 
+                   placeholder="Enter text to test streaming TTS..." 
+                   value="Hello! This is a comprehensive test of our new streaming text-to-speech system. It should start speaking almost immediately while still processing the rest of this sentence. The experience should feel much more natural and responsive than traditional TTS systems.">
+            <button id="start-btn" onclick="startStreaming()" disabled>
+                🎤 Start Streaming TTS
+            </button>
+            <button id="clear-btn" onclick="clearLog()">
+                🗑️ Clear Log
+            </button>
+        </div>
+        
+        <div id="streaming-indicator" class="streaming-indicator">
+            <div class="wave-animation">
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+            </div>
+            <span>AI is speaking...</span>
+        </div>
+        
+        <div class="performance-stats">
+            <div class="stat-card">
+                <div id="first-audio-time" class="stat-value">--</div>
+                <div class="stat-label">Time to First Audio (ms)</div>
+            </div>
+            <div class="stat-card">
+                <div id="total-chunks" class="stat-value">--</div>
+                <div class="stat-label">Total Chunks</div>
+            </div>
+            <div class="stat-card">
+                <div id="streaming-duration" class="stat-value">--</div>
+                <div class="stat-label">Streaming Duration (s)</div>
+            </div>
+            <div class="stat-card">
+                <div id="connection-status" class="stat-value">--</div>
+                <div class="stat-label">Connection Status</div>
+            </div>
+        </div>
+        
+        <h3>📝 Event Log</h3>
+        <div id="log" class="log-container">
+            <div class="log-entry">
+                <span class="log-timestamp">[Loading]</span>
+                <span class="log-type">[INIT]</span>
+                <span class="log-message">Initializing streaming TTS test...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class StreamingTTSTest {
+            constructor() {
+                this.websocket = null;
+                this.isConnected = false;
+                this.streamingStartTime = null;
+                this.firstAudioTime = null;
+                this.chunks = [];
+                this.audioQueue = [];
+                this.isPlaying = false;
+                
+                this.init();
+            }
+            
+            init() {
+                this.connectWebSocket();
+                this.setupUI();
+                this.log('INIT', 'Streaming TTS test initialized');
+            }
+            
+            connectWebSocket() {
+                const wsUrl = `ws://${window.location.host}/ws/streaming-tts`;
+                this.log('CONNECT', `Connecting to ${wsUrl}`);
+                
+                try {
+                    this.websocket = new WebSocket(wsUrl);
+                    
+                    this.websocket.onopen = () => {
+                        this.isConnected = true;
+                        this.updateStatus('connected', 'Connected to WebSocket ✅');
+                        this.updateConnectionStatus('Connected');
+                        document.getElementById('start-btn').disabled = false;
+                        this.log('CONNECT', 'WebSocket connection established');
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        this.handleMessage(JSON.parse(event.data));
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        this.isConnected = false;
+                        this.updateStatus('error', 'WebSocket connection closed ❌');
+                        this.updateConnectionStatus('Disconnected');
+                        document.getElementById('start-btn').disabled = true;
+                        this.log('CONNECT', 'WebSocket connection closed');
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        this.updateStatus('error', 'WebSocket connection error ❌');
+                        this.updateConnectionStatus('Error');
+                        this.log('ERROR', `WebSocket error: ${error}`);
+                    };
+                    
+                } catch (error) {
+                    this.updateStatus('error', `Connection failed: ${error.message} ❌`);
+                    this.log('ERROR', `Failed to connect: ${error.message}`);
+                }
+            }
+            
+            handleMessage(message) {
+                this.log('RECEIVE', `${message.type}: ${JSON.stringify(message).substring(0, 100)}...`);
+                
+                switch (message.type) {
+                    case 'tts_streaming_started':
+                        this.handleStreamingStarted(message);
+                        break;
+                    case 'streaming_audio_chunk':
+                        this.handleStreamingChunk(message);
+                        break;
+                    case 'tts_streaming_completed':
+                        this.handleStreamingCompleted(message);
+                        break;
+                    case 'error':
+                        this.handleError(message);
+                        break;
+                    default:
+                        this.log('UNKNOWN', `Unknown message type: ${message.type}`);
+                }
+            }
+            
+            handleStreamingStarted(message) {
+                this.updateStatus('streaming', 'Streaming TTS in progress 🎵');
+                this.showStreamingIndicator(true);
+                this.streamingStartTime = Date.now();
+                this.firstAudioTime = null;
+                this.chunks = [];
+                this.log('STREAM', 'Streaming TTS started');
+            }
+            
+            handleStreamingChunk(message) {
+                const chunk = {
+                    index: message.chunk_index,
+                    text: message.text,
+                    timestamp: Date.now()
+                };
+                
+                this.chunks.push(chunk);
+                
+                // Record time to first audio
+                if (this.firstAudioTime === null) {
+                    this.firstAudioTime = Date.now() - this.streamingStartTime;
+                    this.updateFirstAudioTime(this.firstAudioTime);
+                    this.log('PERFORMANCE', `First audio chunk received in ${this.firstAudioTime}ms`);
+                }
+                
+                // Play audio using browser's speech synthesis
+                this.playTextToSpeech(message.text);
+                
+                this.log('CHUNK', `Chunk ${message.chunk_index + 1}/${message.total_chunks}: "${message.text}"`);
+                this.updateTotalChunks(this.chunks.length);
+            }
+            
+            handleStreamingCompleted(message) {
+                const duration = (Date.now() - this.streamingStartTime) / 1000;
+                this.updateStatus('connected', 'Streaming TTS completed ✅');
+                this.showStreamingIndicator(false);
+                this.updateStreamingDuration(duration);
+                
+                this.log('COMPLETE', `Streaming completed: ${message.summary?.total_chunks || this.chunks.length} chunks in ${duration.toFixed(2)}s`);
+                this.log('SUMMARY', `Performance: First audio in ${this.firstAudioTime}ms, ${this.chunks.length} total chunks`);
+            }
+            
+            handleError(message) {
+                this.updateStatus('error', `Error: ${message.message} ❌`);
+                this.showStreamingIndicator(false);
+                this.log('ERROR', message.message);
+            }
+            
+            playTextToSpeech(text) {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.rate = 1.0;
+                    utterance.pitch = 1.0;
+                    utterance.volume = 1.0;
+                    
+                    // Use a more natural voice if available
+                    const voices = speechSynthesis.getVoices();
+                    const preferredVoice = voices.find(voice => 
+                        voice.name.includes('Natural') || 
+                        voice.name.includes('Premium') ||
+                        voice.lang.startsWith('en')
+                    );
+                    if (preferredVoice) {
+                        utterance.voice = preferredVoice;
+                    }
+                    
+                    speechSynthesis.speak(utterance);
+                    this.log('TTS', `Playing: "${text}"`);
+                } else {
+                    this.log('TTS', 'Speech synthesis not supported in this browser');
+                }
+            }
+            
+            startStreaming() {
+                if (!this.isConnected) {
+                    this.log('ERROR', 'Not connected to WebSocket');
+                    return;
+                }
+                
+                const text = document.getElementById('text-input').value.trim();
+                if (!text) {
+                    this.log('ERROR', 'No text entered');
+                    return;
+                }
+                
+                const message = {
+                    type: 'start_streaming',
+                    text: text,
+                    session_id: 'web_test_' + Date.now()
+                };
+                
+                this.websocket.send(JSON.stringify(message));
+                this.log('SEND', `Sent streaming request: "${text.substring(0, 50)}..."`);
+            }
+            
+            setupUI() {
+                // Enter key support
+                document.getElementById('text-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.startStreaming();
+                    }
+                });
+                
+                // Load voices for speech synthesis
+                if ('speechSynthesis' in window) {
+                    speechSynthesis.getVoices(); // Trigger voice loading
+                    speechSynthesis.onvoiceschanged = () => {
+                        const voices = speechSynthesis.getVoices();
+                        this.log('TTS', `Loaded ${voices.length} TTS voices`);
+                    };
+                }
+            }
+            
+            updateStatus(type, message) {
+                const status = document.getElementById('status');
+                status.className = `status ${type}`;
+                status.textContent = message;
+            }
+            
+            showStreamingIndicator(show) {
+                const indicator = document.getElementById('streaming-indicator');
+                if (show) {
+                    indicator.classList.add('active');
+                } else {
+                    indicator.classList.remove('active');
+                }
+            }
+            
+            updateFirstAudioTime(time) {
+                document.getElementById('first-audio-time').textContent = time;
+            }
+            
+            updateTotalChunks(count) {
+                document.getElementById('total-chunks').textContent = count;
+            }
+            
+            updateStreamingDuration(duration) {
+                document.getElementById('streaming-duration').textContent = duration.toFixed(2);
+            }
+            
+            updateConnectionStatus(status) {
+                document.getElementById('connection-status').textContent = status;
+            }
+            
+            log(type, message) {
+                const logContainer = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-timestamp">[${timestamp}]</span>
+                    <span class="log-type">[${type}]</span>
+                    <span class="log-message">${message}</span>
+                `;
+                
+                logContainer.appendChild(logEntry);
+                logContainer.scrollTop = logContainer.scrollHeight;
+                
+                console.log(`[${timestamp}] [${type}] ${message}`);
+            }
+            
+            clearLog() {
+                document.getElementById('log').innerHTML = '';
+                this.log('CLEAR', 'Log cleared');
+            }
+        }
+        
+        // Global functions for HTML
+        let streamingTest;
+        
+        function startStreaming() {
+            streamingTest.startStreaming();
+        }
+        
+        function clearLog() {
+            streamingTest.clearLog();
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            streamingTest = new StreamingTTSTest();
+        });
+    </script>
+</body>
+</html>

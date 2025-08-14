@@ -26,7 +26,9 @@ fun EnhancedInputArea(
     onSendMessage: () -> Unit,
     onStartVoiceInput: () -> Unit,
     onStopVoiceInput: () -> Unit,
+    onStopSpeaking: () -> Unit = {},
     isVoiceInputActive: Boolean,
+    isSpeaking: Boolean = false,
     isProcessing: Boolean,
     isNativeMode: Boolean,
     modifier: Modifier = Modifier
@@ -107,6 +109,23 @@ fun EnhancedInputArea(
                 }
                 
                 Spacer(modifier = Modifier.width(8.dp))
+                
+                // TTS Stop button (only show when speaking)
+                if (isSpeaking) {
+                    FloatingActionButton(
+                        onClick = onStopSpeaking,
+                        modifier = Modifier.size(48.dp),
+                        containerColor = MaterialTheme.colorScheme.error
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VolumeOff,
+                            contentDescription = "Stop speaking",
+                            tint = MaterialTheme.colorScheme.onError
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 
                 // Send button
                 FloatingActionButton(
