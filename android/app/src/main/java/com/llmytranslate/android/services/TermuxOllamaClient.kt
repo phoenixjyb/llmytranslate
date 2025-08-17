@@ -72,7 +72,7 @@ class TermuxOllamaClient {
      */
     suspend fun chatCompletion(
         prompt: String,
-        model: String = "gemma2:2b",
+        model: String = "gemma2:270m",
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
     ): ChatResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()

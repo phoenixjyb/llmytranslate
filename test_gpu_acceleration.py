@@ -112,11 +112,12 @@ if pgrep -f ollama > /dev/null; then
     # Test GPU acceleration with a simple request
     echo "🧪 Testing GPU acceleration..."
     curl -s http://localhost:11434/api/generate \\
-        -d '{"model": "qwen2:0.5b", "prompt": "Test GPU", "stream": false}' \\
+        -d '{"model": "gemma2:270m", "prompt": "Test GPU", "stream": false}' \\
         --max-time 30 | jq '.response // "No response"'
     
     echo "📊 GPU optimization complete!"
     echo "💡 Try these optimized models:"
+    echo "  • ollama pull gemma2:270m   # 270MB, ultra-fast (RECOMMENDED)"
     echo "  • ollama pull qwen2:0.5b    # 350MB, fastest"
     echo "  • ollama pull phi3:mini     # 1.3GB, balanced"
     echo "  • ollama pull gemma2:2b     # 1.6GB, quality"

@@ -95,8 +95,8 @@ class OptimizedLLMService:
         """Select the best model for phone call based on requirements"""
         # For kid-friendly mode, prefer more reliable models
         if kid_friendly:
-            if self.is_model_available("gemma2:2b"):
-                return "gemma2:2b"
+            if self.is_model_available("gemma2:270m"):
+                return "gemma2:270m"
             elif self.is_model_available("gemma3:latest"):
                 return "gemma3:latest"
             elif self.is_model_available("llama3.1:8b"):
@@ -104,20 +104,20 @@ class OptimizedLLMService:
         
         # For general phone calls, prioritize available models
         # Check available models starting with fastest
-        if self.is_model_available("gemma2:2b"):
-            return "gemma2:2b"
+        if self.is_model_available("gemma2:270m"):
+            return "gemma2:270m"
         elif self.is_model_available("gemma3:latest"):
             return "gemma3:latest"
         elif self.is_model_available("llama3.1:8b"):
             return "llama3.1:8b"
-        elif self.is_model_available("gemma2:2b"):
-            return "gemma2:2b"
+        elif self.is_model_available("gemma2:270m"):
+            return "gemma2:270m"
         elif self.is_model_available("llama3.2:1b"):
             return "llama3.2:1b"
             return "llama3.2:1b"
         
         # Fallback to larger model
-        return "gemma2:2b"
+        return "gemma2:270m"
     
     def is_model_available(self, model_name: str) -> bool:
         """Check if a model is available and responsive"""

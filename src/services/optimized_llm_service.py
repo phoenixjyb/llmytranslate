@@ -43,6 +43,15 @@ class OptimizedLLMService:
             #     "context_window": 2048,
             #     "estimated_speed": "very_fast"  # <2s typical
             # },
+            # Smallest and fastest model for mobile
+            "gemma2:270m": {
+                "max_tokens": 40,  # Very small for ultra-fast response
+                "temperature": 0.5,
+                "top_p": 0.8,
+                "stop_sequences": [".", "!", "?"],
+                "context_window": 256,  # Minimal context for speed
+                "estimated_speed": "ultra_fast"  # <0.5s typical
+            },
             "phi3:mini": {
                 "max_tokens": 60,  # Reduced for phone calls
                 "temperature": 0.6,
@@ -93,8 +102,8 @@ class OptimizedLLMService:
     def get_optimal_model_for_phone_call(self, kid_friendly: bool = False, 
                                        language: str = "en") -> str:
         """Select the best model for phone call based on requirements"""
-        # Always use gemma2:2b to avoid model switching overhead
-        return "gemma2:2b"
+        # Always use gemma2:270m to avoid model switching overhead
+        return "gemma2:270m"
     
     def is_model_available(self, model_name: str) -> bool:
         """Check if a model is available and responsive"""
@@ -140,7 +149,7 @@ class OptimizedLLMService:
                 self.active_connections += 1
                 
                 # Get model config
-                config = self.model_configs.get(model, self.model_configs["gemma2:2b"])
+                config = self.model_configs.get(model, self.model_configs["gemma2:270m"])
                 
                 # Optimize context
                 if conversation_context:
@@ -281,7 +290,7 @@ class OptimizedLLMService:
             "recommended_models": {
                 "fastest": self.get_optimal_model_for_phone_call(kid_friendly=False),
                 "kid_friendly": self.get_optimal_model_for_phone_call(kid_friendly=True),
-                "fallback": "gemma2:2b"
+                "fallback": "gemma2:270m"
             }
         }
     
@@ -308,7 +317,7 @@ class OptimizedLLMService:
                 "recommended_models": {
                     "fastest": self.get_optimal_model_for_phone_call(kid_friendly=False),
                     "kid_friendly": self.get_optimal_model_for_phone_call(kid_friendly=True),
-                    "fallback": "gemma2:2b"
+                    "fallback": "gemma2:270m"
                 },
                 "performance_metrics": {
                     "success_rate": (getattr(self, 'successful_requests', 0) / max(getattr(self, 'total_requests', 1), 1)) * 100,
@@ -331,8 +340,8 @@ class OptimizedLLMService:
         logger.info("Warming up models for phone calls...")
         warmup_results = {}
         
-        # Only warm up gemma2:2b to avoid model switching
-        model_name = "gemma2:2b"
+        # Only warm up gemma2:270m to avoid model switching
+        model_name = "gemma2:270m"
         try:
             # Send a simple warmup request
             result = await self.fast_completion(

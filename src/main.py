@@ -31,7 +31,7 @@ logger = MockLogger()
 
 
 async def preload_ollama_model():
-    """Preload gemma2:2b model to eliminate startup delays."""
+    """Preload gemma2:270m model to eliminate startup delays."""
     try:
         import httpx
         

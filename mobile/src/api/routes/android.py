@@ -33,7 +33,7 @@ class AndroidSession:
         self.settings = {
             "language": "en-US",
             "kid_friendly": False,
-            "model": "gemma2:2b",
+            "model": "gemma2:270m",
             "use_native_stt": True,
             "use_native_tts": True,
             "audio_transfer": False
@@ -146,7 +146,7 @@ async def handle_android_session_start(websocket: WebSocket, message: Dict) -> s
         "server_info": {
             "version": "android_optimized",
             "features": ["native_stt", "native_tts", "text_only", "fast_llm"],
-            "models_available": ["gemma2:2b", "gemma3:1b", "phi3-mini"]
+            "models_available": ["gemma2:270m", "gemma2:2b", "phi3:mini"]
         },
         "settings": session.settings
     })

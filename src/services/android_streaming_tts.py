@@ -177,7 +177,7 @@ async def get_llm_response_for_android(conversation_context, settings):
         
         llm_response = await ollama_client.chat_completion(
             messages=conversation_context,
-            model=settings.get("model", "gemma2:2b"),
+            model=settings.get("model", "gemma2:270m"),
             stream=False
         )
         

@@ -227,7 +227,7 @@ class LLMStreamingSimulator:
     """
     
     @staticmethod
-    async def create_llm_stream(prompt: str, model: str = "gemma2:2b") -> AsyncGenerator[str, None]:
+    async def create_llm_stream(prompt: str, model: str = "gemma2:270m") -> AsyncGenerator[str, None]:
         """
         Create a realistic LLM streaming simulation.
         

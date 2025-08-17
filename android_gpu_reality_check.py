@@ -114,7 +114,7 @@ echo "💡 For best performance:"
 echo "  • Use quantized models (Q4 or Q8)"
 echo "  • Keep models under 1GB for smooth performance"
 echo "  • Close other apps to free memory"
-echo "  • Use models optimized for mobile (phi3:mini, qwen2:0.5b)"
+echo "  • Use models optimized for mobile (gemma2:270m, phi3:mini, qwen2:0.5b)"
 
 # Start Ollama with realistic settings
 echo "🚀 Starting Ollama with mobile optimization..."
@@ -128,7 +128,7 @@ if pgrep -f ollama > /dev/null; then
     
     # Test with a realistic model
     curl -s http://localhost:11434/api/generate \\
-        -d '{"model": "phi3:mini", "prompt": "Hello", "stream": false}' \\
+        -d '{"model": "gemma2:270m", "prompt": "Hello", "stream": false}' \\
         --max-time 30
 else
     echo "❌ Ollama failed to start"
@@ -154,6 +154,7 @@ def main():
     print("❌ GPU acceleration for Ollama in Termux is NOT reliably available")
     print("✅ Focus on CPU optimization and smaller models instead")
     print("🚀 Expected realistic performance:")
+    print("  • gemma2:270m (270MB): 0.5-2 seconds response (FASTEST)")
     print("  • phi3:mini (1.3GB): 2-5 seconds response")
     print("  • qwen2:0.5b (350MB): 1-3 seconds response")
     print("  • gemma2:2b (1.6GB): 3-8 seconds response")

@@ -58,9 +58,9 @@ class OptimizedTranslationService:
             "model_usage": {}
         }
         
-        # Use only gemma2:2b to avoid model switching overhead
+        # Use only gemma2:270m to avoid model switching overhead
         self.model_preferences = [
-            "gemma2:2b",         # Single model for consistency
+            "gemma2:270m",         # Single model for consistency
         ]
         
         self._initialized = False
