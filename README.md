@@ -1,8 +1,34 @@
-# 🚀 LLM Translation Service - Optimized Edition
+# 🚀 LLM Translation Service - Multi-Pipeline Architecture
 
-A high-performance, locally-hosted translation service that leverages Ollama-managed Large Language Models for Chinese-English bidirectional translation with Baidu Translate API compatibility. 
+A high-performance, multi-deployment translation service that leverages different AI pipelines optimized for specific hardware configurations. Features **4 distinct deployment pipelines**: Web Server (RTX 3090), Android+Termux (edge computing), Android+QNN (hardware acceleration), and Android+Samsung Native APIs (premium mobile experience).
 
-**🆕 Now with advanced performance optimizations: Connection pooling, smart caching, and 244,891x speedup on cached translations!**
+**🆕 Multi-Pipeline Architecture: Optimized for web servers, mobile edge computing, and hardware-accelerated mobile AI!**
+
+## 🏗️ Multi-Pipeline Architecture
+
+### **Pipeline 1: Web Server (RTX 3090)** ✅ **PRODUCTION READY**
+- **Purpose**: High-performance server-side inference for complex queries
+- **Hardware**: Windows PC with NVIDIA RTX 3090 (24GB VRAM)
+- **Performance**: 0.5-2.0s response time, streaming TTS, premium quality
+- **Use Cases**: Development environment, complex translations, high-quality inference
+
+### **Pipeline 2a: Android + Termux** ✅ **COMPLETE** (Limited Use)
+- **Purpose**: Edge computing without hardware acceleration
+- **Hardware**: Any Android device with CPU-only processing
+- **Performance**: 1-3s response time (gemma2:270m), offline capability
+- **Use Cases**: Offline fallback, basic translations, development testing
+
+### **Pipeline 2b: Android + Qualcomm QNN** 🔄 **IN PROGRESS** (Target: Oct 2025)
+- **Purpose**: Hardware-accelerated mobile AI using NPU and GPU
+- **Hardware**: Snapdragon 8 Gen 3 (Samsung S24 Ultra target)
+- **Performance**: 0.2-0.8s response time, 80% battery improvement
+- **Use Cases**: Real-time mobile conversations, production mobile AI
+
+### **Pipeline 2c: Android + Samsung Native APIs** 📋 **PLANNED** (Target: Q1 2026)
+- **Purpose**: Premium mobile experience with Samsung-specific optimizations
+- **Hardware**: Samsung flagship devices with native AI APIs
+- **Performance**: 0.1-0.5s response time, premium TTS/STT quality
+- **Use Cases**: Best-in-class mobile AI, Samsung ecosystem integration
 
 ## 🧩 Clients
 
@@ -13,12 +39,19 @@ A high-performance, locally-hosted translation service that leverages Ollama-man
   - Project: `android/`
   - Docs: [Android App Docs](android/README.md)
 
-## 📐 Architecture Docs
+## 📐 Architecture Documentation
 
-- System Overview: `docs/architecture/SYSTEM_ARCHITECTURE.md`
-- Software Design: `docs/architecture/SOFTWARE_DESIGN_DOCUMENT.md`
-- Data Flows: `docs/architecture/DATA_FLOW_DIAGRAM.md`
-- Software Stack Flowcharts: `docs/architecture/SOFTWARE_STACK_FLOWCHART.md`
+### **Core Documents:**
+- **Multi-Pipeline Roadmap**: `MULTI_PIPELINE_ARCHITECTURE_ROADMAP.md`
+- **Implementation Status**: `PIPELINE_IMPLEMENTATION_STATUS.md`
+- **System Architecture**: `docs/architecture/SYSTEM_ARCHITECTURE.md`
+- **Software Design**: `docs/architecture/SOFTWARE_DESIGN_DOCUMENT.md`
+
+### **Pipeline-Specific Documentation:**
+- **Pipeline 1 (Web)**: Streaming TTS implementation in `STREAMING_TTS_COMPLETE_REPORT.md`
+- **Pipeline 2a (Termux)**: Reality check and limitations in `TERMUX_FAILURE_ANALYSIS.md`
+- **Pipeline 2b (QNN)**: Hardware analysis in `QNN_VS_TENSORFLOW_LITE_ANALYSIS.md`
+- **Pipeline 2c (Samsung)**: Native optimization in `ANDROID_PHASE2_NATIVE_ARCHITECTURE_ANALYSIS.md`
 
 ## ⚡ Performance Optimizations
 

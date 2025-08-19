@@ -1,153 +1,161 @@
 # LLMyTranslate Software Design Document
-## Mobile-First AI Architecture Revision
+## Multi-Pipeline Architecture for Optimized AI Performance
 
-### Document Version: 3.0 (Major Revision)
-### Date: August 14, 2025
+### Document Version: 4.0 (Multi-Pipeline Architecture)
+### Date: August 19, 2025
 ### Authors: Development Team
-### Status: ARCHITECTURE REDESIGN REQUIRED
+### Status: STRATEGIC MULTI-PIPELINE IMPLEMENTATION
 
 ---
 
-## 🚨 Critical Design Revision Notice
+## 🏗️ Multi-Pipeline Architecture Overview
 
-**BREAKING CHANGE**: This document supersedes all previous versions. The original Termux+Ollama architecture has been proven unfeasible for production mobile use.
+**STRATEGIC EVOLUTION**: This document introduces a comprehensive 4-pipeline architecture designed to optimize performance across different hardware configurations and deployment scenarios.
 
-### Revision Reason:
-- **GPU acceleration impossible** in Termux on Android
-- **CPU performance inadequate** for real-time conversation
-- **User experience unacceptable** (3-8 second response times)
-- **Resource consumption excessive** for mobile devices
+### Architecture Philosophy:
+- **Pipeline 1**: Web Server (Windows PC + RTX 3090) - Cloud inference for maximum quality
+- **Pipeline 2a**: Android + Termux - Edge computing without hardware acceleration
+- **Pipeline 2b**: Android + Qualcomm QNN - Hardware-accelerated mobile AI
+- **Pipeline 2c**: Android + Samsung Native APIs - Device-specific optimization
 
----
-
-## 📋 System Requirements (Revised)
-
-### Functional Requirements:
-1. **Sub-second response times** for simple queries (0.2-0.5s target)
-2. **Maximum 2-second response** for complex queries
-3. **Offline capability** with degraded but functional experience
-4. **Battery efficient** - minimal impact on device performance
-5. **Scalable quality** - adapt to device capabilities
-
-### Non-Functional Requirements:
-1. **Performance**: 90th percentile response time <1s
-2. **Reliability**: 99.5% uptime for core functionality
-3. **Efficiency**: <5% battery drain per hour of usage
-4. **Compatibility**: Android 8+ (API 26+)
-5. **Resource usage**: <500MB RAM, <2GB storage
+### Key Insight:
+**Different hardware requires different approaches** - there is no one-size-fits-all solution for AI deployment across web servers and mobile devices.
 
 ---
 
-## 🏗️ System Architecture (Redesigned)
+## 📋 Multi-Pipeline System Requirements
 
-### High-Level Architecture
+### Pipeline 1: Web Server (RTX 3090)
+**Status: ✅ PRODUCTION READY**
+
+#### Functional Requirements:
+1. **High-quality inference** with premium models (gemma2:2b, larger models)
+2. **Streaming TTS** with real-time WebSocket delivery
+3. **GPU acceleration** for fast inference (RTX 3090 optimization)
+4. **Multi-user support** with connection pooling
+5. **Development environment** for model testing and optimization
+
+#### Performance Specifications:
+- **Response time**: 0.5-2.0 seconds for complex queries
+- **Concurrent users**: 10-50 simultaneous connections
+- **TTS latency**: <500ms first audio chunk
+- **Reliability**: 99.9% uptime for development workflows
+
+### Pipeline 2a: Android + Termux
+**Status: ✅ COMPLETE (Basic Offline Capability)**
+
+#### Functional Requirements:
+1. **Offline capability** for basic translation tasks
+2. **CPU-only inference** with optimized small models
+3. **Fallback functionality** when network unavailable
+4. **Educational/testing** environment for development
+
+#### Performance Specifications:
+- **Response time**: 1-3 seconds (gemma2:270m), acceptable for offline use
+- **Battery impact**: High (CPU-intensive), suitable for occasional use
+- **Storage**: 270MB-2GB for model storage
+- **Use case**: Offline fallback, development testing
+
+### Pipeline 2b: Android + Qualcomm QNN
+**Status: 🔄 IN PROGRESS (Target: October 2025)**
+
+#### Functional Requirements:
+1. **Hardware acceleration** via Snapdragon NPU and Adreno GPU
+2. **Sub-second responses** for real-time conversation
+3. **Battery efficiency** through optimized AI hardware
+4. **Production mobile experience** matching web quality
+
+#### Performance Specifications:
+- **Response time**: 0.2-0.8 seconds (6-10x faster than Termux)
+- **Battery efficiency**: 80% improvement over CPU-only processing
+- **Quality**: High-fidelity inference with quantized models
+- **Thermal**: Minimal impact through NPU design
+
+### Pipeline 2c: Android + Samsung Native APIs
+**Status: 📋 PLANNED (Target: Q1 2026)**
+
+#### Functional Requirements:
+1. **Samsung-specific optimization** for S24 Ultra hardware
+2. **Premium user experience** with native Samsung services
+3. **Maximum performance** through device-specific APIs
+4. **Ecosystem integration** with Samsung apps and services
+
+#### Performance Specifications:
+- **Response time**: 0.1-0.5 seconds (fastest mobile experience)
+- **Audio quality**: Premium Samsung neural TTS voices
+- **STT accuracy**: 96%+ with Samsung Speech Recognition
+- **Power efficiency**: Optimized Samsung power management
+
+---
+
+## 🏗️ Multi-Pipeline System Architecture
+
+### High-Level Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    User Interface                       │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐│
-│  │   Voice     │ │    Text     │ │    Settings &       ││
-│  │  Interface  │ │  Interface  │ │   Diagnostics       ││
-│  └─────────────┘ └─────────────┘ └─────────────────────┘│
-└─────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────┐
-│              Intelligence Router                         │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐│
-│  │   Query     │ │ Performance │ │    Response         ││
-│  │ Classifier  │ │  Monitor    │ │    Cache            ││
-│  └─────────────┘ └─────────────┘ └─────────────────────┘│
-└─────────────────────────────────────────────────────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-┌───────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   On-Device   │    │   Cloud LLM     │    │     Cache       │
-│   ML Engine   │    │    Service      │    │   & Fallback    │
-│               │    │                 │    │                 │
-│ TensorFlow    │    │  GPT-4/Claude   │    │  Pre-computed   │
-│ Lite + GPU    │    │   via API       │    │   Responses     │
-│  Delegate     │    │                 │    │                 │
-└───────────────┘    └─────────────────┘    └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            Client Application Layer                              │
+│  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐│
+│  │   Web Browser   │ │  Android App    │ │  Cross-Platform │ │   Photo Album   ││
+│  │   (Desktop)     │ │    (Mobile)     │ │     API         │ │   Integration   ││
+│  └─────────────────┘ └─────────────────┘ └─────────────────┘ └─────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                         │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          Intelligent Pipeline Router                            │
+│  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐│
+│  │ Request         │ │ Hardware        │ │ Network         │ │ Performance     ││
+│  │ Classifier      │ │ Detector        │ │ Monitor         │ │ Analytics       ││
+│  └─────────────────┘ └─────────────────┘ └─────────────────┘ └─────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                         │
+        ┌────────────────────┬───────────┼───────────┬────────────────────┐
+        │                    │           │           │                    │
+┌───────────────┐  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│   Pipeline 1  │  │   Pipeline 2a   │ │   Pipeline 2b   │ │   Pipeline 2c   │
+│  Web Server   │  │ Android+Termux  │ │  Android+QNN    │ │Android+Samsung  │
+│   RTX 3090    │  │  Edge Computing │ │Hardware Accel.  │ │  Native APIs    │
+│               │  │                 │ │                 │ │                 │
+│ ✅ COMPLETE   │  │ ✅ COMPLETE     │ │ 🔄 IN PROGRESS  │ │ 📋 PLANNED      │
+│               │  │                 │ │                 │ │                 │
+│ • Ollama CUDA │  │ • CPU Inference │ │ • NPU + GPU     │ │ • Samsung AI    │
+│ • Streaming   │  │ • Basic Models  │ │ • ONNX Runtime  │ │ • Premium TTS   │
+│ • WebSocket   │  │ • Offline Mode  │ │ • QNN Provider  │ │ • Native STT    │
+│ • 244k Cache  │  │ • Fallback Use  │ │ • Hardware Opt  │ │ • DeX Support   │
+└───────────────┘  └─────────────────┘ └─────────────────┘ └─────────────────┘
 ```
 
-### Component Details
-
-#### 1. Intelligence Router
-**Purpose**: Smart routing between on-device and cloud processing
+### Pipeline Selection Logic
 
 ```kotlin
-class IntelligenceRouter {
-    suspend fun processQuery(query: String, context: Context): ProcessingResult {
-        val complexity = queryClassifier.analyze(query)
-        val deviceCapability = performanceMonitor.getCurrentCapability()
-        val networkStatus = networkMonitor.getStatus()
+class MultiPipelineRouter {
+    suspend fun selectPipeline(request: InferenceRequest): Pipeline {
+        val context = AnalysisContext(
+            hardware = deviceHardware.analyze(),
+            network = networkMonitor.getStatus(),
+            quality = request.qualityRequirements,
+            latency = request.latencyRequirements
+        )
         
         return when {
-            complexity.isSimple() && deviceCapability.canHandleLocal() -> 
-                onDeviceEngine.process(query)
-                
-            networkStatus.isFastAndReliable() -> 
-                cloudService.process(query)
-                
-            else -> 
-                fallbackService.process(query)
-        }
-    }
-}
-```
-
-#### 2. On-Device ML Engine (NEW)
-**Technology**: TensorFlow Lite with GPU Delegate
-
-```kotlin
-class OnDeviceMLEngine {
-    private lateinit var interpreter: Interpreter
-    private val gpuDelegate by lazy { GpuDelegate() }
-    
-    fun initialize() {
-        val modelFile = loadOptimizedModel()
-        interpreter = Interpreter(modelFile, 
-            Interpreter.Options().apply {
-                addDelegate(gpuDelegate)
-                setNumThreads(getOptimalThreadCount())
-                setUseXNNPACK(true) // Enable ARM optimizations
-            }
-        )
-    }
-    
-    suspend fun processText(input: String): String = withContext(Dispatchers.Default) {
-        val tokens = tokenizer.encode(input)
-        val output = FloatArray(VOCAB_SIZE)
-        
-        interpreter.run(tokens, output)
-        return@withContext tokenizer.decode(output)
-    }
-}
-```
-
-#### 3. Cloud LLM Service
-**Purpose**: Handle complex queries requiring high-quality responses
-
-```kotlin
-class CloudLLMService {
-    private val openAIClient = OpenAIClient(apiKey)
-    private val anthropicClient = AnthropicClient(apiKey)
-    
-    suspend fun processComplex(query: String): CloudResult {
-        return try {
-            // Primary: OpenAI GPT-4
-            val response = openAIClient.chatCompletion(
-                model = "gpt-4-turbo",
-                messages = listOf(ChatMessage(role = "user", content = query)),
-                maxTokens = 150,
-                temperature = 0.7
-            )
-            CloudResult.success(response.content)
+            // High quality needed + network available + complex query
+            context.needsMaxQuality && context.hasNetwork -> 
+                Pipeline.WEB_SERVER_RTX
             
-        } catch (e: Exception) {
-            // Fallback: Anthropic Claude
-            tryAnthropicFallback(query)
+            // Mobile device with QNN capability
+            context.device.hasSnapdragon8Gen3 && context.device.hasQNNSupport -> 
+                Pipeline.ANDROID_QNN
+            
+            // Samsung device with native API support
+            context.device.isSamsungFlagship && context.device.hasSamsungAI -> 
+                Pipeline.ANDROID_SAMSUNG_NATIVE
+            
+            // Offline or basic queries
+            context.device.isAndroid && !context.hasNetwork -> 
+                Pipeline.ANDROID_TERMUX
+            
+            // Fallback
+            else -> selectFallbackPipeline(context)
         }
     }
 }
