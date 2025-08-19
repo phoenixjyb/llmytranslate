@@ -45,8 +45,12 @@ class OllamaClient:
     async def health_check(self) -> Dict[str, Any]:
         """Check Ollama service health using requests library."""
         try:
-            # Use requests instead of httpx due to compatibility issues
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5.0)
+            # Use requests with no proxy for local ollama connections (bypass Clash VPN)
+            proxies = {
+                'http': '',
+                'https': ''
+            }
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5.0, proxies=proxies)
             if response.status_code == 200:
                 models = response.json().get("models", [])
                 return {

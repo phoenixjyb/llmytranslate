@@ -1,0 +1,178 @@
+# M2 MacBook Air Pipeline Configuration
+# Optimized for Apple M2 chip with 16GB unified memory and Metal GPU acceleration
+
+pipeline_info:
+  name: "M2 MacBook Air Pipeline"
+  id: "pipeline_1b"
+  platform: "macOS_apple_silicon"
+  chip: "Apple M2"
+  memory: "16GB LPDDR5"
+  gpu: "10-core GPU with Metal acceleration"
+  neural_engine: "16-core Neural Engine (15.8 TOPS)"
+
+# Model Configuration for M2 Performance Tiers
+model_tiers:
+  ultra_fast:
+    # < 0.5 seconds - Phone calls, real-time chat
+    models:
+      - name: "gemma3:270m"
+        size: "291MB"
+        speed: "0.24s"
+        use_case: "real-time translation, phone calls"
+        memory_usage: "~500MB"
+        
+  fast:
+    # 0.5-1.0 seconds - Interactive translation
+    models:
+      - name: "gemma2:2b"
+        size: "1.6GB"
+        speed: "0.37s"
+        use_case: "interactive translation, web interface"
+        memory_usage: "~2GB"
+        
+  capable:
+    # 1-3 seconds - Complex tasks, document translation  
+    models:
+      - name: "gemma3:latest"
+        size: "3.3GB"
+        speed: "~1.5s"
+        use_case: "document translation, complex queries"
+        memory_usage: "~4GB"
+        
+  advanced:
+    # 8-15 seconds - Vision-capable translation, multimodal tasks
+    models:
+      - name: "llava:latest"
+        size: "4.7GB"
+        speed: "~10s"
+        use_case: "vision-capable translation, multimodal tasks, detailed alternatives"
+        memory_usage: "~6GB"
+        
+  expert:
+    # 20-40 seconds - Specialized vision tasks, large context analysis
+    models:        
+      - name: "qwen2.5vl:7b"
+        size: "6.0GB"
+        speed: "~30s" 
+        use_case: "complex vision analysis, large document OCR, 128k context tasks"
+        memory_usage: "~8GB"
+        note: "Optimized for vision tasks, not general translation"
+
+# M2-Specific Performance Settings
+performance_settings:
+  # Memory Management (16GB total, 12GB available for models)
+  max_concurrent_models: 2
+  model_unload_timeout: 300  # 5 minutes
+  memory_threshold: 0.75     # Unload models at 75% memory usage
+  
+  # Metal GPU Optimization
+  gpu_acceleration: true
+  metal_performance_shaders: true
+  unified_memory_optimization: true
+  
+  # Connection Pooling
+  max_concurrent_requests: 8
+  request_timeout: 30
+  health_check_interval: 60
+  
+  # Proxy Configuration (Clash VPN compatibility)
+  bypass_proxy_for_local: true
+  local_endpoints:
+    - "localhost"
+    - "127.0.0.1" 
+    - "::1"
+
+# Service Routing Strategy
+routing_strategy:
+  # Route requests based on urgency and complexity (updated with real performance data)
+  realtime_threshold: 0.5     # Route to ultra_fast models (gemma3:270m)
+  interactive_threshold: 1.0  # Route to fast models (gemma2:2b)
+  batch_threshold: 3.0        # Route to capable models (gemma3:latest)
+  advanced_threshold: 15.0    # Route to advanced models (llava:latest)
+  expert_threshold: 30.0      # Route to expert models (qwen2.5vl:7b)
+  
+  # Task-specific routing
+  translation_primary: "gemma2:2b"     # Primary translation model
+  translation_detailed: "llava:latest" # Detailed translation with alternatives
+  vision_tasks: "qwen2.5vl:7b"        # Complex vision analysis
+  realtime_chat: "gemma3:270m"         # Phone calls, instant response
+  
+  # Fallback strategy
+  fallback_order:
+    - "gemma3:270m"    # Always available, fastest (0.2-0.3s)
+    - "gemma2:2b"      # Good balance of speed/quality (0.4-0.8s)
+    - "gemma3:latest"  # Higher quality when time allows (1-3s)
+    # Note: llava and qwen2.5vl not in fallback due to slow speeds
+    
+# Quality Optimization
+quality_settings:
+  translation_mode: "succinct"  # Default mode for speed
+  temperature: 0.7
+  top_p: 0.9
+  max_tokens:
+    ultra_fast: 80      # gemma3:270m - keep responses short for speed
+    fast: 150           # gemma2:2b - balanced length
+    capable: 300        # gemma3:latest - detailed responses
+    advanced: 500       # llava:latest - detailed with alternatives 
+    expert: 1000        # qwen2.5vl:7b - comprehensive analysis
+    
+# Monitoring & Alerting  
+monitoring:
+  performance_tracking: true
+  response_time_alerts:
+    ultra_fast: 1.0   # Alert if gemma3:270m > 1 second
+    fast: 2.0         # Alert if gemma2:2b > 2 seconds
+    capable: 5.0      # Alert if gemma3:latest > 5 seconds
+    advanced: 20.0    # Alert if llava:latest > 20 seconds
+    expert: 45.0      # Alert if qwen2.5vl:7b > 45 seconds
+    
+  memory_alerts:
+    warning: 0.8      # 80% memory usage
+    critical: 0.9     # 90% memory usage
+    
+  model_health_check: 30  # Check every 30 seconds
+
+# Integration Settings
+integration:
+  api_endpoints:
+    health: "/api/m2/health"
+    models: "/api/m2/models" 
+    translate: "/api/m2/translate"
+    vision: "/api/m2/vision"
+    
+  compatibility:
+    baidu_api: true          # Maintain Baidu API compatibility
+    cross_platform: true    # Work with other pipelines
+    mobile_optimized: true  # Support mobile clients
+    
+# Deployment Configuration
+deployment:
+  startup_models:
+    - "gemma3:270m"    # Always load for instant response
+    - "gemma2:2b"      # Load for general use
+    
+  lazy_load_models:
+    - "gemma3:latest"  # Load for quality tasks (1-3s)
+    - "llava:latest"   # Load for detailed translation (8-15s)
+    # Note: qwen2.5vl:7b excluded from auto-load due to 30s+ response time
+    
+  service_discovery:
+    advertise_capabilities: 
+      - "ultra_fast_translation"
+      - "metal_gpu_acceleration" 
+      - "vision_multimodal"
+      - "16gb_unified_memory"
+      
+# Development & Testing
+development:
+  debug_mode: false
+  performance_profiling: true
+  model_benchmarking: true
+  memory_profiling: true
+  
+  test_suites:
+    - "translation_accuracy"
+    - "response_time" 
+    - "memory_usage"
+    - "gpu_utilization"
+    - "concurrent_load"

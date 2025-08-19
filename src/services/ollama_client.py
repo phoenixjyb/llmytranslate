@@ -45,8 +45,12 @@ class OllamaClient:
     async def health_check(self) -> Dict[str, Any]:
         """Check Ollama service health using requests library."""
         try:
-            # Use requests instead of httpx due to compatibility issues
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5.0)
+            # Use requests with no proxy for local ollama connections (bypass Clash VPN)
+            proxies = {
+                'http': '',
+                'https': ''
+            }
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5.0, proxies=proxies)
             if response.status_code == 200:
                 models = response.json().get("models", [])
                 return {
@@ -69,8 +73,12 @@ class OllamaClient:
     async def list_models(self) -> Dict[str, Any]:
         """List available models from Ollama using requests library."""
         try:
-            # Use requests instead of httpx due to compatibility issues
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5.0)
+            # Use requests with no proxy for local ollama connections (bypass Clash VPN)
+            proxies = {
+                'http': '',
+                'https': ''
+            }
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5.0, proxies=proxies)
             if response.status_code == 200:
                 data = response.json()
                 models = data.get("models", [])
@@ -126,10 +134,14 @@ class OllamaClient:
                 }
             }
             
-            # Make direct HTTP call using requests
+            # Make direct HTTP call using requests (bypass proxy for local connections)
+            proxies = {
+                'http': '',
+                'https': ''
+            }
             logger.info(f"[OLLAMA] Making POST request to: {url}")
             print(f"[OLLAMA] DEBUG: Making POST request to: {url}")
-            response = requests.post(url, json=payload, timeout=90.0)  # Increased timeout to 90 seconds for queuing
+            response = requests.post(url, json=payload, timeout=90.0, proxies=proxies)  # Bypass proxy for local ollama
             processing_time = time.time() - start_time
             logger.info(f"[OLLAMA] Request completed in {processing_time:.3f}s, status: {response.status_code}")
             print(f"[OLLAMA] DEBUG: Request completed in {processing_time:.3f}s, status: {response.status_code}")
