@@ -57,3 +57,16 @@ mobile/*/node_modules/
 *.pyd
 __pycache__/
 *.egg-info/
+
+# Large AI model files (exclude from git)
+models/*.tflite
+models/*.safetensors
+models/*.bin
+models/*.onnx
+models/*.h5
+models/tinyllama_1b/
+models/distilbert_base/
+models/microsoft_speecht5_tts/
+models/facebook_mms_tts_eng/
+# Allow keeping model directories structure but not the large files
+!models/.gitkeep

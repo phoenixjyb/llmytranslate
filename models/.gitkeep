@@ -1,0 +1,15 @@
+# This file ensures the models directory structure is preserved in git
+# Large model files are excluded via .gitignore but the directory structure remains
+
+## Real Models Available (not in git):
+- real_tinyllama.tflite (321MB) - From TinyLlama 1B
+- real_speecht5.tflite (6MB) - From Microsoft SpeechT5  
+- deepspeech_lite.tflite (45MB) - Mozilla DeepSpeech
+- tinyllama_1b/ - Downloaded TinyLlama 1B model (2.1GB)
+- distilbert_base/ - Downloaded DistilBERT model (857MB)
+- microsoft_speecht5_tts/ - Downloaded SpeechT5 model (558MB)
+- facebook_mms_tts_eng/ - Downloaded Facebook MMS TTS (277MB)
+
+## To recreate models:
+1. Run: python scripts/download_real_models.py
+2. Run: python scripts/convert_tinyllama_final.py
