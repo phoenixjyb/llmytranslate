@@ -49,6 +49,7 @@ The **SOFTWARE_STACK_FLOWCHART.md** provides:
 ### 📱 Client Architectures
 - **Web Client**: [docs/web/README.md](../web/README.md)
 - **Android App**: [android/README.md](../../android/README.md) — see “Component Diagram (Mermaid)”
+ - **On‑device ML (TFLite)**: Lightweight wrappers for TinyLlama and SpeechT5 are available for Android experiments and local smoke tests; server/web paths remain Ollama‑backed.
 
 ## 🔧 Architecture Highlights
 

@@ -531,6 +531,7 @@ class CrossPipelineRouter {
 - 🆕 **Pipeline 1b**: M2 MacBook Air Server (READY TO IMPLEMENT - 3 weeks)
 - ✅ **Pipeline 2a**: Android Termux (COMPLETE with limitations)
 - 🔄 **Pipeline 2b**: QNN Integration (75% COMPLETE - Foundation Ready)
+ - 🧪 **Cross-Cutting**: Added TensorFlow Lite wrappers (TinyLlama, SpeechT5) for on‑device experiments and Android assets; web/server continues to use Ollama.
 
 ### **📋 IMMEDIATE NEXT STEP: QNN SDK Integration**
 **Priority**: Download QNN SDK 2.24.0 and complete hardware acceleration

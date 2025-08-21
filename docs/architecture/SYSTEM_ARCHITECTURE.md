@@ -12,6 +12,10 @@ This document describes the end-to-end architecture of LLMyTranslate across back
 - Local LLM Runtime (Ollama)
   - Model hosting and inference (Gemma3, Llama3.1, Qwen, etc.)
   - GPU acceleration if available
+- On‑device Inference (TensorFlow Lite)
+  - Lightweight TFLite runtime with wrappers for TinyLlama (LLM) and SpeechT5 (TTS)
+  - Primary target: Android on‑device; also used for local smoke tests
+  - Backends: tensorflow.lite or tflite_runtime; NNAPI/XNNPACK delegates on mobile
 - Clients
   - Web UI (static HTML/JS under `web/`)
     - Chat UI with streaming TTS (`web/assets/streaming-tts*.js`)
@@ -19,6 +23,7 @@ This document describes the end-to-end architecture of LLMyTranslate across back
   - Android App (`android/`)
     - Native STT/TTS
     - WebSocket connection to backend for chat/translation
+    - Optional on‑device model execution via TFLite (models stored as app assets)
 - Remote Access (optional)
   - Tailscale / Ngrok for external connectivity
 - Automation & Scripts
@@ -46,6 +51,9 @@ flowchart TD
   API --> Svc
   Svc -->|Async HTTPX keep-alive| Ollama
   Svc <-->|LRU or Redis| Cache
+
+  %% Optional on-device path (Android / local smoke tests)
+  Android -. optional TFLite .-> Svc
 
   classDef store fill:#eef,stroke:#446;
   class Cache store;
@@ -106,6 +114,8 @@ sequenceDiagram
 - Local development: `python run.py` with `.env.local`
 - Remote mode: Nginx/ngrok/Tailscale with `.env.remote`
 - Docker support available in `docker/`
+- Android on‑device (optional): TFLite models under app assets (ignored in git),
+  invoked via lightweight wrappers; server/web pipeline continues to use Ollama by default.
 
 ## Reliability & Performance
 
