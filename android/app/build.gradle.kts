@@ -21,6 +21,31 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        
+        // TensorFlow Lite requires ARM64 for optimal GPU performance
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+        
+        // TensorFlow Lite specific cmake arguments
+        externalNativeBuild {
+            cmake {
+                cppFlags += listOf("-std=c++17", "-frtti", "-fexceptions")
+                arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
+                    "-DTFLITE_GPU_AVAILABLE=ON",
+                    "-DONNX_MOBILE_AVAILABLE=ON"
+                )
+            }
+        }
+    }
+    
+    // Enable native builds for TensorFlow Lite Mobile AI
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {
@@ -89,6 +114,14 @@ dependencies {
     
     // Audio processing for STT
     implementation("androidx.media3:media3-common:1.2.1")
+    
+    // TensorFlow Lite for mobile AI acceleration
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    
+    // ONNX Runtime for fallback mobile AI
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.16.3")
     
     // JSON Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")

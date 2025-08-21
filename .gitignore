@@ -70,3 +70,43 @@ models/microsoft_speecht5_tts/
 models/facebook_mms_tts_eng/
 # Allow keeping model directories structure but not the large files
 !models/.gitkeep
+
+# Ignore Android local config and build internals
+android/local.properties
+android/app/.cxx/
+
+# Ignore TFLite assets but keep folder
+android/app/src/main/assets/models/**/*.tflite
+android/app/src/main/assets/**/*.tflite
+
+# Ignore legacy scripts sandbox
+scripts/legacy/**
+
+# Ignore backup files
+**/*.bak
+**/*.bak[0-9]
+
+# Extra Android build noise
+android/.cxx/
+android/**/build/
+android/**/captures/
+android/**/intermediates/
+android/**/generated/
+android/**/outputs/
+
+# Ignore local runtime files
+.ngrok_pid
+logs/*.log
+logs/**/*.log
+# Data caches and local DBs
+data/audio_cache/
+logs/
+*.db
+
+# Ignore data caches
+data/cache/
+
+# Track placeholders and samples inside ignored folders
+!data/.gitkeep
+!data/samples/**
+!logs/.gitkeep
