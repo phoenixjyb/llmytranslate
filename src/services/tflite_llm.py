@@ -20,11 +20,11 @@ class TinyLlamaTFLite:
         self.model_path = model_path
         if not self.model_path.exists():
             raise FileNotFoundError(f"TFLite model not found: {self.model_path}")
-    self.model = TFLiteModel(self.model_path)
+        self.model = TFLiteModel(self.model_path)
 
     def logits(self, input_ids: np.ndarray) -> np.ndarray:
         if input_ids.dtype != np.int32:
             input_ids = input_ids.astype(np.int32)
-    self.model.set_input(input_ids, 0)
-    self.model.invoke()
-    return self.model.get_output(0)
+        self.model.set_input(input_ids, 0)
+        self.model.invoke()
+        return self.model.get_output(0)
