@@ -31,11 +31,15 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags += listOf("-std=c++17", "-frtti", "-fexceptions")
+                val extraCmakeArgs = (project.findProperty("cmakeArgs") as String?)
+                    ?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
                 arguments += listOf(
                     "-DANDROID_STL=c++_shared",
                     "-DTFLITE_GPU_AVAILABLE=ON",
                     "-DONNX_MOBILE_AVAILABLE=ON"
+                    // , "-DREAL_TFLITE_AVAILABLE=ON"  // enable when libtensorflowlite.so is available
                 )
+                arguments += extraCmakeArgs
             }
         }
     }
@@ -166,4 +170,60 @@ dependencies {
     
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// --- TensorFlow Lite native convenience tasks ---
+tasks.register("tfliteCopyLibs") {
+    group = "tflite"
+    description = "Copy TFLite native .so from AARs into third_party/tflite/libs/arm64-v8a"
+    doLast {
+        val dest = file("src/main/cpp/third_party/tflite/libs/arm64-v8a")
+        dest.mkdirs()
+        val deps = listOf(
+            "org.tensorflow:tensorflow-lite:2.14.0",
+            "org.tensorflow:tensorflow-lite-gpu:2.14.0"
+        )
+        deps.forEach { coord ->
+            val cfg = configurations.detachedConfiguration(dependencies.create(coord))
+            cfg.isTransitive = false
+            cfg.resolve().forEach { aar ->
+                copy {
+                    from(zipTree(aar))
+                    include("jni/arm64-v8a/*.so")
+                    into(dest)
+                }
+            }
+        }
+        println("Copied TFLite .so files to: ${dest}")
+    }
+}
+
+tasks.register<Exec>("tfliteFetchHeaders") {
+    group = "tflite"
+    description = "Fetch TFLite C++ headers into third_party/tflite/include via helper script"
+    commandLine("bash", "${project.rootDir}/scripts/android/fetch_tflite_headers.sh")
+}
+
+// --- Always bundle real TinyLlama TFLite model from repo's models/ folder ---
+// We include only the LLM (real_tinyllama.tflite) for now; SpeechT5 is postponed.
+val generatedRealModelsDir = layout.buildDirectory.dir("generated/assets/realModels")
+
+val prepareRealLLMAssets = tasks.register<Copy>("prepareRealLLMAssets") {
+    val src = rootProject.file("models")
+    from(src) { include("real_tinyllama.tflite") }
+    into(generatedRealModelsDir.map { it.dir("models") })
+    doFirst {
+        println("Including LLM model from ${src} → ${generatedRealModelsDir.get().asFile}/models")
+    }
+}
+
+android.sourceSets.named("main").configure {
+    assets.srcDir(generatedRealModelsDir)
+}
+
+// Ensure the copy runs before merging assets for both debug and release
+listOf("mergeDebugAssets", "mergeReleaseAssets").forEach { target ->
+    tasks.matching { it.name == target }.configureEach {
+        dependsOn(prepareRealLLMAssets)
+    }
 }

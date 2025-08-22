@@ -17,7 +17,8 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToTesting: () -> Unit
 ) {
     var serverUrl by remember { mutableStateOf("ws://192.168.1.100:8080") }
     var selectedLanguage by remember { mutableStateOf("English") }
@@ -225,6 +226,24 @@ fun SettingsScreen(
                 }
             }
             
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Developer",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            item {
+                Button(
+                    onClick = onNavigateToTesting,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open Mobile AI Testing")
+                }
+            }
+
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(

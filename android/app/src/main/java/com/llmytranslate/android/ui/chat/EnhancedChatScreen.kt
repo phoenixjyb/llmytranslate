@@ -39,7 +39,8 @@ import java.util.*
 @Composable
 fun EnhancedChatScreen(
     onNavigateToVoice: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToTesting: () -> Unit
 ) {
     val context = LocalContext.current
     val viewModel: EnhancedChatViewModel = viewModel { EnhancedChatViewModel(context) }
@@ -78,6 +79,7 @@ fun EnhancedChatScreen(
             averageLatency = uiState.averageLatencyMs,
             onNavigateToVoice = onNavigateToVoice,
             onNavigateToSettings = onNavigateToSettings,
+            onNavigateToTesting = onNavigateToTesting,
             onToggleNativeMode = { viewModel.toggleNativeMode() }
         )
         
@@ -151,6 +153,7 @@ private fun EnhancedTopBar(
     averageLatency: Long,
     onNavigateToVoice: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToTesting: () -> Unit,
     onToggleNativeMode: () -> Unit
 ) {
     TopAppBar(
@@ -212,6 +215,9 @@ private fun EnhancedTopBar(
         actions = {
             IconButton(onClick = onNavigateToVoice) {
                 Icon(Icons.Default.Mic, contentDescription = "Voice Chat")
+            }
+            IconButton(onClick = onNavigateToTesting) {
+                Icon(Icons.Default.Science, contentDescription = "Mobile AI Testing")
             }
             IconButton(onClick = onNavigateToSettings) {
                 Icon(Icons.Default.Settings, contentDescription = "Settings")
