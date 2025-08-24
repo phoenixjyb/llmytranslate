@@ -1,0 +1,50 @@
+# LLMyTranslate Service Requirements - Updated August 24, 2025
+# Modern versions matching current environment
+# Environment: .venv with Python 3.11.9 + PyTorch 2.8.0+cu126
+
+# Core Framework - Modern FastAPI Stack
+fastapi>=0.116.1
+uvicorn[standard]>=0.35.0
+pydantic>=2.11.7
+pydantic-settings>=2.7.0
+
+# HTTP Client for Ollama and Services
+httpx>=0.28.1
+aiohttp>=3.12.14
+anyio>=4.9.0
+
+# Google Cloud AI Platform (if needed)
+# google-cloud-aiplatform>=1.42.1
+# google-cloud-core>=2.4.1
+# google-auth>=2.25.2
+# google-auth-oauthlib>=1.2.0
+# google-api-core>=2.15.0
+
+# Network Management
+dnspython>=2.7.0
+
+# Audio Processing (Whisper)
+openai-whisper>=20250625
+torch>=2.8.0
+torchaudio>=2.8.0
+torchvision>=0.23.0
+
+# Security
+bcrypt>=4.3.0
+
+# Utilities
+click>=8.2.1
+colorama>=0.4.6
+psutil>=6.3.0
+python-multipart>=0.0.20
+
+# Development
+pytest
+pytest-asyncio
+pytest-cov
+
+# File handling
+aiofiles
+
+# Email validation
+email-validator>=2.2.0

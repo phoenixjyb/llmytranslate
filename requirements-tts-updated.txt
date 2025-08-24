@@ -1,0 +1,43 @@
+# LLMyTranslate TTS Environment - Updated August 24, 2025
+# RTX 3090 Optimized Environment
+# Environment: .venv-tts with Python 3.12.10 + PyTorch 2.8.0+cu126
+
+# Core Framework
+fastapi>=0.116.1
+uvicorn[standard]>=0.35.0
+aiofiles>=24.1.0
+
+# TTS Engine - Coqui TTS
+coqui-tts>=0.27.0
+coqui-tts-trainer>=0.3.1
+
+# PyTorch with CUDA 12.6 support
+torch>=2.8.0+cu126
+torchaudio>=2.8.0+cu126
+torchvision>=0.23.0+cu126
+
+# Audio Processing
+librosa>=0.11.0
+audioread>=3.0.1
+scipy>=1.14.0
+
+# Text Processing
+anyascii>=0.3.3
+babel>=2.17.0
+dateparser>=1.1.8
+
+# Utilities
+psutil>=6.3.0
+numpy>=2.3.0
+matplotlib>=3.10.0
+coqpit-config>=0.2.1
+
+# Development
+pytest
+pytest-asyncio
+
+# Additional ML dependencies
+encodec>=0.1.1
+einops>=0.8.1
+transformers>=4.55.0
+safetensors>=0.4.8
